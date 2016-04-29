@@ -31,20 +31,72 @@
 
 class motorTask : public scheduler_task
 {
-        PWM *servo4;
+        PWM servo2[6];  ///< P2.0-P2.5
+        float min2[6];  ///< Min PWM Percentage
+        float max2[6];  ///< Max PWM Percentage
+        float deg2[6];  ///< Max Degree of Servo
+        typedef enum {
+            p2_0=0,
+            p2_1=1,
+            p2_2=2,
+            p2_3=3,
+            p2_4=4,
+            p2_5=5
+        } pwmNum;
     public:
-        motorTask(uint8_t priority) : scheduler_task("motor", 4096, priority)
+        motorTask(uint8_t priority) : scheduler_task("motor", 4096, priority),
+        servo2{PWM(PWM::pwm1, 50),  ///< P2.0
+               PWM(PWM::pwm2, 50),  ///< P2.1
+               PWM(PWM::pwm3, 50),  ///< P2.2
+               PWM(PWM::pwm4, 50),  ///< P2.3
+               PWM(PWM::pwm5, 50),  ///< P2.4
+               PWM(PWM::pwm6, 50)}, ///< P2.5
+        min2{5.0,   ///< P2.0
+             5.0,   ///< P2.1
+             5.0,   ///< P2.2
+             5.0,   ///< P2.3
+             5.0,   ///< P2.4
+             5.0},  ///< P2.5
+        max2{10.,   ///< P2.0
+             10.,   ///< P2.1
+             10.,   ///< P2.2
+             10.,   ///< P2.3
+             10.,   ///< P2.4
+             10.},  ///< P2.5
+        deg2{180,   ///< P2.0
+             180,   ///< P2.1
+             180,   ///< P2.2
+             180,   ///< P2.3
+             180,   ///< P2.4
+             180}   ///< P2.5
         {
-            servo4 = new PWM(PWM::pwm5, 50);
+            /* Nothing to init */
+        }
+
+        /**
+         * Sets the PWM based on the degree.
+         * If servo2[0]=50Hz, min2[0]=5.0, max2[0]=10.0, and deg2[0]=180, then you can use the following :
+         *      - Left    : set(p2_0, -90);     // -90 degrees = 5.0 % of 20ms = 1.0ms
+         *      - Neutral : set(p2_0,   0);     //   0 degrees = 7.5 % of 20ms = 1.5ms
+         *      - Right   : set(p2_0,  90);     //  90 degrees = 10  % of 20ms = 2.0ms
+         *
+         * You can use micro-steps to position the servo motor by using
+         * set(p2_0, 0.1), set(p2_0, 0.2) ... set(p2_0, 34.5) etc.
+         */
+        bool set(pwmNum pinNum, float degree)
+        {
+            if (degree < -deg2[pinNum]/2 || degree > deg2[pinNum]/2)
+                return false;
+            return servo2[pinNum].set(((max2[pinNum]+min2[pinNum])/2)+((degree/(deg2[pinNum]/2))*((max2[pinNum]-min2[pinNum])/2)));
         }
 
         bool run(void *p)
         {
-            (*servo4).set(5.0);
+            set(p2_0, -90);
             vTaskDelay(1000);
-            (*servo4).set(7.5);
+            set(p2_0,   0);
             vTaskDelay(1000);
-            (*servo4).set(10.);
+            set(p2_0,  90);
             vTaskDelay(1000);
             return true;
         }

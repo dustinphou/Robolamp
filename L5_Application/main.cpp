@@ -96,8 +96,8 @@ class motorTask : public scheduler_task
         float max2[6];  ///< Max PWM Percentage
         float deg2[6];  ///< Max Degree of Servo
         typedef enum {
-            p2_0=0,
-            p2_1=1,
+            p2_0=0, ///< Dustin
+            p2_1=1, ///< James
             p2_2=2,
             p2_3=3,
             p2_4=4,
@@ -106,26 +106,26 @@ class motorTask : public scheduler_task
 
     public:
         motorTask(uint8_t priority) : scheduler_task("motor", 2048, priority),
-        servo2{PWM(PWM::pwm1, 50),  ///< P2.0
-               PWM(PWM::pwm2, 50),  ///< P2.1
+        servo2{PWM(PWM::pwm1, 50),  ///< P2.0   Dustin
+               PWM(PWM::pwm2, 50),  ///< P2.1   James
                PWM(PWM::pwm3, 50),  ///< P2.2
                PWM(PWM::pwm4, 50),  ///< P2.3
                PWM(PWM::pwm5, 50),  ///< P2.4
                PWM(PWM::pwm6, 50)}, ///< P2.5
-        min2{5.0,   ///< P2.0
-             5.0,   ///< P2.1
+        min2{2.4,   ///< P2.0   Dustin
+             2.4,   ///< P2.1   James
              5.0,   ///< P2.2
              5.0,   ///< P2.3
              5.0,   ///< P2.4
              5.0},  ///< P2.5
-        max2{10.,   ///< P2.0
-             10.,   ///< P2.1
+        max2{12.6,  ///< P2.0   Dustin
+             12.5,  ///< P2.1   James
              10.,   ///< P2.2
              10.,   ///< P2.3
              10.,   ///< P2.4
              10.},  ///< P2.5
-        deg2{180,   ///< P2.0
-             180,   ///< P2.1
+        deg2{180,   ///< P2.0   Dustin
+             180,   ///< P2.1   James
              180,   ///< P2.2
              180,   ///< P2.3
              180,   ///< P2.4

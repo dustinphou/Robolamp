@@ -71,7 +71,7 @@ bool terminalTask::taskEntry()
     CommandProcessor &cp = mCmdProc;
 
     // RoboLamp handlers
-    cp.addHandler(roboLampHandler, "coord",   "Pass coordinates as percentages. Ex: 'coord <x%> <y%>'");
+    cp.addHandler(roboLampHandler, "cv",      "Pass pixel coordinates. Ex: 'cv 123x456 1920x1080'");
 
     // System information handlers
     cp.addHandler(taskListHandler, "info",    "Task/CPU Info.  Use 'info 200' to get CPU during 200ms");

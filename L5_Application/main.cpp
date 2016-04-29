@@ -29,6 +29,66 @@
 #include "iostream"
 #include "lpc_pwm.hpp"
 
+struct CV_t
+{
+        uint16_t coordx;    // The horizontal coordinates of the point. Ex: 123
+        uint16_t coordy;    // The vertical coordinates of the point. Ex: 456
+        uint16_t framex;    // The horizontal width of the frame. Ex: 1920
+        uint16_t framey;    // The vertical height of the frame. Ex: 1080
+};
+
+struct PWM_t
+{
+        float p2_0;     // The PWM signal for P2.0
+        float p2_1;     // The PWM signal for P2.1
+        float p2_2;     // The PWM signal for P2.2
+        float p2_3;     // The PWM signal for P2.3
+        float p2_4;     // The PWM signal for P2.4
+        float p2_5;     // The PWM signal for P2.5
+};
+
+/**
+ * CV_Core is the brain of all logic.
+ */
+class CV_Core : public scheduler_task
+{
+        QueueHandle_t CV_QueueHandle;
+        QueueHandle_t PWM_QueueHandle;
+
+    public:
+        CV_Core(uint8_t priority) : scheduler_task("core", 2048, priority),
+        CV_QueueHandle(xQueueCreate(1, sizeof(CV_t))),
+        PWM_QueueHandle(xQueueCreate(1, sizeof(PWM_t)))
+        {
+            /* Nothing to init */
+        }
+
+        bool run(void *p)
+        {
+            return true;
+        }
+};
+
+/**
+ * visionTask controls all CV signals.
+ */
+class visionTask : public scheduler_task
+{
+    public:
+        visionTask(uint8_t priority) : scheduler_task("vision", 2048, priority)
+        {
+            /* Nothing to init */
+        }
+
+        bool run(void *p)
+        {
+            return true;
+        }
+};
+
+/**
+ * motorTask controls all PWM signals.
+ */
 class motorTask : public scheduler_task
 {
         PWM servo2[6];  ///< P2.0-P2.5
@@ -43,8 +103,9 @@ class motorTask : public scheduler_task
             p2_4=4,
             p2_5=5
         } pwmNum;
+
     public:
-        motorTask(uint8_t priority) : scheduler_task("motor", 4096, priority),
+        motorTask(uint8_t priority) : scheduler_task("motor", 2048, priority),
         servo2{PWM(PWM::pwm1, 50),  ///< P2.0
                PWM(PWM::pwm2, 50),  ///< P2.1
                PWM(PWM::pwm3, 50),  ///< P2.2
@@ -118,7 +179,9 @@ class motorTask : public scheduler_task
  */
 int main(void)
 {
-    scheduler_add_task(new motorTask(PRIORITY_LOW));
+    scheduler_add_task(new CV_Core(PRIORITY_LOW));
+    scheduler_add_task(new visionTask(PRIORITY_MEDIUM));
+    scheduler_add_task(new motorTask(PRIORITY_MEDIUM));
 
     /**
      * A few basic tasks for this bare-bone system :

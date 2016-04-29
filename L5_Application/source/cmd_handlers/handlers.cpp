@@ -47,10 +47,12 @@
 
 CMD_HANDLER_FUNC(roboLampHandler)
 {
-    float x;    // A percentage from the center of a frame where: Left = -100 and Right =  100
-    float y;    // A percentage from the center of a frame where: Up   =  100 and Down  = -100
-    if (cmdParams.scanf("%12f %12f", &x, &y) != 2) {
-        output.putline("Syntax Error: Example usage is 'coord <x%> <y%>'");
+    uint16_t coordx;    // The horizontal coordinates of the point. Ex: 123
+    uint16_t coordy;    // The vertical coordinates of the point. Ex: 456
+    uint16_t framex;    // The horizontal width of the frame. Ex: 1920
+    uint16_t framey;    // The vertical height of the frame. Ex: 1080
+    if (cmdParams.scanf("%5hux%5hu %5hux%5hu", &coordx, &coordy, &framex, &framey) != 4) {
+        output.putline("Syntax Error: Usage is 'cv 123x456 1920x1080'");
         return false;
     }
     /* Do something */

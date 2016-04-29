@@ -70,12 +70,6 @@ bool terminalTask::taskEntry()
     /* remoteTask() creates shared object in its init(), so we can get it now */
     CommandProcessor &cp = mCmdProc;
 
-    // Light task handlers
-    cp.addHandler(taskHandler, "task", "Suspend or resume a task. Ex: 'task suspend task1' or 'task resume task2'");
-
-    // Orientation task handlers
-    cp.addHandler(orientationHandler, "orientation", "Two options: 'orientation on' or 'orientation off'");
-
     // System information handlers
     cp.addHandler(taskListHandler, "info",    "Task/CPU Info.  Use 'info 200' to get CPU during 200ms");
     cp.addHandler(memInfoHandler,  "meminfo", "See memory info");

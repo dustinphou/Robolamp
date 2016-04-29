@@ -16,7 +16,6 @@
  *          p r e e t . w i k i @ g m a i l . c o m
  */
 
-#include <stdio.h>          // debugPrint()
 #include <string.h>         // memcpy
 
 #include "i2c_base.hpp"
@@ -106,7 +105,7 @@ bool I2C_Base::transfer(uint8_t deviceAddress, uint8_t firstReg, uint8_t* pData,
         xSemaphoreGive(mI2CMutex);
     }
 
-        return status;
+    return status;
 }
 
 bool I2C_Base::checkDeviceResponse(uint8_t deviceAddress)
@@ -122,8 +121,7 @@ bool I2C_Base::checkDeviceResponse(uint8_t deviceAddress)
 
 I2C_Base::I2C_Base(LPC_I2C_TypeDef* pI2CBaseAddr) :
         mpI2CRegs(pI2CBaseAddr),
-        mDisableOperation(false),
-        debugTransaction()
+        mDisableOperation(false)
 {
     mI2CMutex = xSemaphoreCreateMutex();
     mTransferCompleteSignal = xSemaphoreCreateBinary();
@@ -176,6 +174,12 @@ bool I2C_Base::init(uint32_t pclk, uint32_t busRateInKhz)
     mpI2CRegs->I2SCLH = (half_clock_divider * percent_high) / 100;
     mpI2CRegs->I2SCLL = (half_clock_divider * percent_low ) / 100;
 
+    // Set I2C slave address and enable I2C
+    mpI2CRegs->I2ADR0 = 0;
+    mpI2CRegs->I2ADR1 = 0;
+    mpI2CRegs->I2ADR2 = 0;
+    mpI2CRegs->I2ADR3 = 0;
+
     // Enable I2C and the interrupt for it
     mpI2CRegs->I2CONSET = 0x40;
     NVIC_EnableIRQ(mIRQ);
@@ -183,59 +187,7 @@ bool I2C_Base::init(uint32_t pclk, uint32_t busRateInKhz)
     return true;
 }
 
-bool I2C_Base::initSlave(uint8_t slaveAddr, uint8_t *buffer, uint32_t bufferSize)
-{
-    // Set I2C slave address and enable I2C
-    mpI2CRegs->I2ADR0 = slaveAddr;
-    mpI2CRegs->I2ADR1 = 0x00;
-    mpI2CRegs->I2ADR2 = 0x00;
-    mpI2CRegs->I2ADR3 = 0x00;
-    sTransaction.bufferBase = buffer;
-    sTransaction.bufferLast = buffer + bufferSize - sizeof(uint8_t);
-    sTransaction.bufferNext = NULL;
-    sTransaction.error = 0;
-    mpI2CRegs->I2CONSET = 0x44;     // ACK next byte --> Next state: dataReceivedAsSlaveAcked(receive)
-    return true;
-}
 
-bool I2C_Base::initDebug(uint8_t *stack, uint32_t stackSize)
-{
-    // Setup Debug State Stack
-    if (stackSize > 0) {
-        debugTransaction.debugEnabled = true;
-        debugTransaction.debugBase = stack;
-        debugTransaction.debugLast = stack + stackSize - sizeof(uint8_t);
-        debugTransaction.debugNext = stack;
-        return true;
-    } else {
-        return false;
-    }
-}
-
-bool I2C_Base::debugUnread()
-{
-    if ((debugTransaction.debugEnabled) && (debugTransaction.debugNext > debugTransaction.debugBase))
-        return true;
-    else
-        return false;
-}
-
-void I2C_Base::debugClear()
-{
-    debugTransaction.debugNext = debugTransaction.debugBase;
-}
-
-bool I2C_Base::debugPrint()
-{
-
-    if (debugUnread())
-        for (uint8_t *c = debugTransaction.debugBase; c < debugTransaction.debugNext; c++)
-            printf("%x ", *c);
-    else
-        return false;
-    debugClear();
-    return true;
-}
 
 /// Private ///
 
@@ -268,7 +220,7 @@ void I2C_Base::i2cKickOffTransfer(uint8_t devAddr, uint8_t regStart, uint8_t* pB
 I2C_Base::mStateMachineStatus_t I2C_Base::i2cStateMachine()
 {
     enum {
-        // General states:
+        // General states :
         busError        = 0x00,
         start           = 0x08,
         repeatStart     = 0x10,
@@ -285,27 +237,6 @@ I2C_Base::mStateMachineStatus_t I2C_Base::i2cStateMachine()
         readModeNackedBySlave = 0x48,
         dataAvailableAckSent  = 0x50,
         dataAvailableNackSent = 0x58,
-
-        // General states:
-        arbitrationLostAsMasterOwnWriteAddressReceivedAcked         = 0x68,
-        arbitrationLostAsMasterOwnReadAddressReceivedAcked          = 0xB0,
-        arbitrationLostAsMasterGeneralCallWriteAddressReceivedAcked = 0x78,
-        noRelevantStateInformationAvailableSIFlagCleared            = 0xF8,
-
-        // Slave Receiver States:
-        ownWriteAddressReceivedAcked     = 0x60,
-        generalCallAddressReceivedAcked  = 0x70,
-        dataReceivedAsSlaveAcked         = 0x80,
-        dataReceivedAsSlaveNacked        = 0x88,
-        dataReceivedAsGenericSlaveAcked  = 0x90,
-        dataReceivedAsGenericSlaveNacked = 0x98,
-        stopOrRepeatStart                = 0xA0,
-
-        // Slave Transmitter States:
-        ownReadAddressReceivedAcked      = 0xA8,
-        dataTransmittedAckedByMaster     = 0xB8,
-        dataTransmittedNackedByMaster    = 0xC0,
-        lastDataTransmittedAckedByMaster = 0xC8,
     };
 
     mStateMachineStatus_t state = busy;
@@ -322,9 +253,6 @@ I2C_Base::mStateMachineStatus_t I2C_Base::i2cStateMachine()
      ***********************************************************************************************************
      */
 
-    /* Error code for the rest of i2cStateMachine() */
-    #define errorcode   0xFE        // Any Error Code
-
     /* Me being lazy and using #defines instead of inline functions :( */
     #define clearSIFlag()       mpI2CRegs->I2CONCLR = (1<<3)
     #define setSTARTFlag()      mpI2CRegs->I2CONSET = (1<<5)
@@ -336,19 +264,14 @@ I2C_Base::mStateMachineStatus_t I2C_Base::i2cStateMachine()
     #define setStop()           clearSTARTFlag();                           \
                                 mpI2CRegs->I2CONSET = (1<<4);               \
                                 clearSIFlag();                              \
-                                setAckFlag();                               \
                                 while((mpI2CRegs->I2CONSET&(1<<4)));        \
                                 if(I2C_READ_MODE(mTransaction.slaveAddr))   \
                                     state = readComplete;                   \
                                 else                                        \
                                     state = writeComplete;
 
-    const uint32_t currentState = mpI2CRegs->I2STAT;
-    if ((debugTransaction.debugEnabled) && (debugTransaction.debugNext <= debugTransaction.debugLast))
-        *(debugTransaction.debugNext++) = currentState;
-    switch (currentState)
+    switch (mpI2CRegs->I2STAT)
     {
-    /// Master States Start Here
         case start:
             mpI2CRegs->I2DAT = I2C_WRITE_ADDR(mTransaction.slaveAddr);
             clearSIFlag();
@@ -426,92 +349,6 @@ I2C_Base::mStateMachineStatus_t I2C_Base::i2cStateMachine()
             mTransaction.error = mpI2CRegs->I2STAT;
             break;
 
-    /// Slave States Start Here
-
-        // Slave Receiver States:
-        case ownWriteAddressReceivedAcked:
-            if (sTransaction.bufferBase <= sTransaction.bufferLast) {                   // Buffer Space Available
-                setAckFlag();   // ACK next byte --> Next state: dataReceivedAsSlaveAcked(receive)
-            } else if (sTransaction.bufferBase > sTransaction.bufferLast) {             // No Buffer Space Available
-                setNackFlag();  // NACK next byte --> Next state: dataReceivedAsSlaveNacked(receive)
-            }
-            clearSIFlag();
-            sTransaction.bufferNext = NULL; // Buffer Setup
-            sTransaction.error = 0;
-            break;
-        case generalCallAddressReceivedAcked:
-            clearSIFlag();
-            break;
-        case dataReceivedAsSlaveAcked:
-            if (sTransaction.bufferNext == NULL)                                        // No Buffer Address Stored
-                sTransaction.bufferNext = sTransaction.bufferBase + mpI2CRegs->I2DAT;  // Buffer Address Byte
-            else if (sTransaction.bufferNext <= sTransaction.bufferLast)                // Buffer Space Available
-                *(sTransaction.bufferNext++) = mpI2CRegs->I2DAT;                        // Buffer Data Byte
-            else /* sTransaction.bufferNext > sTransaction.bufferLast */                // No Buffer Space Available
-                sTransaction.error = mpI2CRegs->I2DAT;                                  // Buffer Data Byte
-            if (sTransaction.bufferNext < sTransaction.bufferLast)                  // Many Buffer Space Remaining
-                setAckFlag();   // ACK next byte --> Next state: dataReceivedAsSlaveAcked(receive)
-            else if (sTransaction.bufferNext == sTransaction.bufferLast)            // One Buffer Space Remaining
-                setNackFlag();  // NACK next byte --> Next state: dataReceivedAsSlaveNacked(receive)
-            else /* sTransaction.bufferNext > sTransaction.bufferLast */            // No Buffer Space Remaining
-                setNackFlag();  // NACK next byte --> Next state: dataReceivedAsSlaveAcked(receive)
-            clearSIFlag();
-            break;
-        case dataReceivedAsSlaveNacked:
-            if (sTransaction.bufferNext < sTransaction.bufferLast)                  // Many Buffer Space Remaining (Prevented by dataReceivedAsSlaveAcked)
-                *(sTransaction.bufferNext++) = mpI2CRegs->I2DAT;
-            else if (sTransaction.bufferNext == sTransaction.bufferLast)            // One Buffer Space Remaining
-                *(sTransaction.bufferNext++) = mpI2CRegs->I2DAT;
-            else /* sTransaction.bufferNext > sTransaction.bufferLast */            // No Buffer Space Remaining
-                sTransaction.error = mpI2CRegs->I2DAT;
-            setAckFlag();       // Reset ACK
-            clearSIFlag();
-            break;
-        case dataReceivedAsGenericSlaveAcked:
-            clearSIFlag();
-            break;
-        case dataReceivedAsGenericSlaveNacked:
-            clearSIFlag();
-            break;
-        case stopOrRepeatStart:
-            setAckFlag();       // Reset ACK
-            clearSIFlag();
-            break;
-
-        // Slave Transmitter States:
-        case ownReadAddressReceivedAcked:
-            if (sTransaction.bufferNext <= sTransaction.bufferLast)                 // Buffer Space Available
-                mpI2CRegs->I2DAT = *(sTransaction.bufferNext++);
-            else /* sTransaction.bufferNext > sTransaction.bufferLast */            // No Buffer Space Available
-                mpI2CRegs->I2DAT = errorcode;    // Any Error Byte
-            setAckFlag();       // Reset ACK
-            clearSIFlag();
-            break;
-        case dataTransmittedAckedByMaster:
-            if (sTransaction.bufferNext <= sTransaction.bufferLast)                 // Buffer Space Available
-                mpI2CRegs->I2DAT = *(sTransaction.bufferNext++);
-            else /* sTransaction.bufferNext > sTransaction.bufferLast */            // No Buffer Space Available
-                mpI2CRegs->I2DAT = errorcode;    // Any Error Byte
-            setAckFlag();       // Reset ACK
-            clearSIFlag();
-            break;
-        case dataTransmittedNackedByMaster:
-            setAckFlag();       // Reset ACK
-            clearSIFlag();
-            break;
-        case lastDataTransmittedAckedByMaster:
-            clearSIFlag();
-            break;
-
-        /* Slave Ending States Start Here */
-        case arbitrationLostAsMasterOwnWriteAddressReceivedAcked:
-        case arbitrationLostAsMasterOwnReadAddressReceivedAcked:
-        case arbitrationLostAsMasterGeneralCallWriteAddressReceivedAcked:
-        case noRelevantStateInformationAvailableSIFlagCleared:
-            clearSIFlag();
-            break;
-
-        /* Master Ending States Start Here */
         case slaveAddressNacked:    // no break
         case dataNackedBySlave:     // no break
         case readModeNackedBySlave: // no break

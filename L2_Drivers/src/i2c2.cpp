@@ -75,12 +75,6 @@ bool I2C2::init(unsigned int speedInKhz)
     }
 }
 
-bool I2C2::initSlave(uint8_t slaveAddr, uint8_t *buffer, uint32_t bufferSize)
-{
-    /* Nothing to init here */
-    return I2C_Base::initSlave(slaveAddr, buffer, bufferSize);
-}
-
 I2C2::I2C2() : I2C_Base((LPC_I2C_TypeDef*) LPC_I2C2_BASE)
 {
 

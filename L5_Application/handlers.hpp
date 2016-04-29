@@ -25,11 +25,7 @@
 
 #include "command_handler.hpp"
 
-/// Handler for 'compute' orientation task
-CMD_HANDLER_FUNC(taskHandler);
 
-/// Handler for 'compute' orientation task
-CMD_HANDLER_FUNC(orientationHandler);
 
 /// Handler for task list & CPU Information
 CMD_HANDLER_FUNC(taskListHandler);

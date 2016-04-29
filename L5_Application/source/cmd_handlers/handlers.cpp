@@ -45,38 +45,7 @@
 #include "c_tlm_stream.h"
 #include "c_tlm_var.h"
 
-CMD_HANDLER_FUNC(taskHandler)
-{
-    char *function, *taskname;
-    if (cmdParams.tokenize(" ", 2, &function, &taskname) == 2) {
-        scheduler_task *task = scheduler_task::getTaskPtrByName(taskname);
-        if (task == NULL)
-            output.printf("No '%s' task running\n", taskname);
-        else if (strcmp(function, "suspend") == 0)
-            vTaskSuspend(task->getTaskHandle()); // Can also use: compute->suspend();
-        else if (strcmp(function, "resume") == 0)
-            vTaskResume(task->getTaskHandle());  // Can also use: compute->resume();
-        else
-            output.printf("Two options: 'suspend' or 'resume'\n");
-    } else {
-        output.printf("Suspend or resume a task. Ex: 'task suspend task1' or 'task resume task2'\n");
-    }
-    return true;
-}
 
-CMD_HANDLER_FUNC(orientationHandler)
-{
-    scheduler_task *orient_compute = scheduler_task::getTaskPtrByName("compute");
-    if (orient_compute == NULL)
-        output.printf("No 'compute' task running\n");
-    else if (cmdParams == "on")
-        vTaskResume(orient_compute->getTaskHandle());  // Can also use: compute->resume();
-    else if (cmdParams == "off")
-        vTaskSuspend(orient_compute->getTaskHandle()); // Can also use: compute->suspend();
-    else
-        output.printf("Two options: 'orientation on' or 'orientation off'\n");
-    return true;
-}
 
 CMD_HANDLER_FUNC(taskListHandler)
 {

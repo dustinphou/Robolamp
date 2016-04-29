@@ -108,10 +108,7 @@ class I2C_Base
          */
         bool checkDeviceResponse(uint8_t deviceAddress);
 
-        bool initDebug(uint8_t *stack, uint32_t stackSize);
-        bool debugUnread();
-        void debugClear();
-        bool debugPrint();
+
 
     protected:
         /**
@@ -126,7 +123,6 @@ class I2C_Base
          * @param busRateInKhz  The speed to set for this I2C Bus
          */
         bool init(uint32_t pclk, uint32_t busRateInKhz);
-        bool initSlave(uint8_t slaveAddr, uint8_t *buffer, uint32_t bufferSize);
 
         /**
          * Disables I2C operation
@@ -144,6 +140,15 @@ class I2C_Base
         SemaphoreHandle_t mTransferCompleteSignal; ///< Signal that indicates read is complete
 
         /**
+         * The status of I2C is returned from the I2C function that handles state machine
+         */
+        typedef enum {
+            busy,
+            readComplete,
+            writeComplete
+        } __attribute__((packed)) mStateMachineStatus_t;
+
+        /**
          * This structure contains I2C transaction parameters
          */
         typedef struct
@@ -157,43 +162,6 @@ class I2C_Base
 
         /// The I2C Input Output frame that contains I2C transaction information
         mI2CTransaction_t mTransaction;
-
-        /**
-         * This structure contains I2C transaction parameters
-         */
-        typedef struct
-        {
-            uint8_t *bufferBase;    ///< Pointer to base address of buffer modifiable only by initSlave()
-            uint8_t *bufferLast;    ///< Pointer to last address of buffer modifiable only by initSlave()
-            uint8_t *bufferNext;    ///< Pointer to next address of buffer to write to
-            uint8_t error;          ///< Error if any occurred within I2C
-        } sI2CTransaction_t;
-
-        /// The I2C Input Output frame that contains I2C transaction information
-        sI2CTransaction_t sTransaction;
-
-        /**
-         * This structure contains I2C debug state stack
-         */
-        typedef struct
-        {
-            bool debugEnabled;      ///< True is debugging is enabled
-            uint8_t *debugBase;     ///< Pointer to base address of debug stack
-            uint8_t *debugLast;     ///< Pointer to last address of debug stack
-            uint8_t *debugNext;     ///< Pointer to next address of debug stack to write to
-        } debugI2CTransaction_t;
-
-        /// The I2C Input Output frame that contains I2C debug information
-        debugI2CTransaction_t debugTransaction;
-
-        /**
-         * The status of I2C is returned from the I2C function that handles state machine
-         */
-        typedef enum {
-            busy,
-            readComplete,
-            writeComplete
-        } __attribute__((packed)) mStateMachineStatus_t;
 
         /**
          * When an interrupt occurs, this handles the I2C State Machine action

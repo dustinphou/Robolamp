@@ -25,7 +25,8 @@
 
 #include "command_handler.hpp"
 
-
+/// Handler for RoboLamp
+CMD_HANDLER_FUNC(roboLampHandler);
 
 /// Handler for task list & CPU Information
 CMD_HANDLER_FUNC(taskListHandler);

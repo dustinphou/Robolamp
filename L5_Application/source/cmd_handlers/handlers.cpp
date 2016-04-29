@@ -45,7 +45,17 @@
 #include "c_tlm_stream.h"
 #include "c_tlm_var.h"
 
-
+CMD_HANDLER_FUNC(roboLampHandler)
+{
+    float x;    // A percentage from the center of a frame where: Left = -100 and Right =  100
+    float y;    // A percentage from the center of a frame where: Up   =  100 and Down  = -100
+    if (cmdParams.scanf("%12f %12f", &x, &y) != 2) {
+        output.putline("Syntax Error: Example usage is 'coord <x%> <y%>'");
+        return false;
+    }
+    /* Do something */
+    return true;
+}
 
 CMD_HANDLER_FUNC(taskListHandler)
 {

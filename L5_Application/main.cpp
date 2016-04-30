@@ -47,24 +47,35 @@ struct PWM_t
         float p2_5;     // The PWM signal for P2.5
 };
 
+enum sharedObject_id
+{
+    CV_QueueHandle_id,
+    PWM_QueueHandle_id,
+};
+
 /**
  * CV_Core is the brain of all logic.
  */
 class CV_Core : public scheduler_task
 {
-        QueueHandle_t CV_QueueHandle;
-        QueueHandle_t PWM_QueueHandle;
+        QueueHandle_t CV_QueueHandle;   ///< Contains incoming data of type ???
+        QueueHandle_t PWM_QueueHandle;  ///< Contains outgoing data of type PWM_t in degrees
 
     public:
         CV_Core(uint8_t priority) : scheduler_task("core", 2048, priority),
-        CV_QueueHandle(xQueueCreate(1, sizeof(CV_t))),
-        PWM_QueueHandle(xQueueCreate(1, sizeof(PWM_t)))
+            CV_QueueHandle(xQueueCreate(1, sizeof(CV_t))),  ///< CV_QueueHandle
+            PWM_QueueHandle(xQueueCreate(1, sizeof(PWM_t))) ///< PWM_QueueHandle
         {
-            /* Nothing to init */
+            addSharedObject(CV_QueueHandle_id, CV_QueueHandle);
+            addSharedObject(PWM_QueueHandle_id, PWM_QueueHandle);
         }
 
         bool run(void *p)
         {
+//            if (xQueueSend(PWM_QueueHandle, &degree, PWM_Timeout))
+//                ;
+//            else
+//                ;
             return true;
         }
 };
@@ -95,41 +106,45 @@ class motorTask : public scheduler_task
         float min2[6];  ///< Min PWM Percentage
         float max2[6];  ///< Max PWM Percentage
         float deg2[6];  ///< Max Degree of Servo
-        typedef enum {
-            p2_0=0, ///< Dustin
-            p2_1=1, ///< James
-            p2_2=2,
-            p2_3=3,
-            p2_4=4,
-            p2_5=5
-        } pwmNum;
+        enum pwmNum {
+            p2_0 = 0,   ///< Dustin
+            p2_1 = 1,   ///< James
+            p2_2 = 2,
+            p2_3 = 3,
+            p2_4 = 4,
+            p2_5 = 5,
+        };
+        QueueHandle_t PWM_QueueHandle;  ///< Contains incoming data of type PWM_t in degrees
+        TickType_t PWM_Timeout;         ///< Max xTicksToWait for xQueueReceive
 
     public:
         motorTask(uint8_t priority) : scheduler_task("motor", 2048, priority),
-        servo2{PWM(PWM::pwm1, 50),  ///< P2.0   Dustin
-               PWM(PWM::pwm2, 50),  ///< P2.1   James
-               PWM(PWM::pwm3, 50),  ///< P2.2
-               PWM(PWM::pwm4, 50),  ///< P2.3
-               PWM(PWM::pwm5, 50),  ///< P2.4
-               PWM(PWM::pwm6, 50)}, ///< P2.5
-        min2{2.4,   ///< P2.0   Dustin
-             2.4,   ///< P2.1   James
-             5.0,   ///< P2.2
-             5.0,   ///< P2.3
-             5.0,   ///< P2.4
-             5.0},  ///< P2.5
-        max2{12.6,  ///< P2.0   Dustin
-             12.5,  ///< P2.1   James
-             10.,   ///< P2.2
-             10.,   ///< P2.3
-             10.,   ///< P2.4
-             10.},  ///< P2.5
-        deg2{180,   ///< P2.0   Dustin
-             180,   ///< P2.1   James
-             180,   ///< P2.2
-             180,   ///< P2.3
-             180,   ///< P2.4
-             180}   ///< P2.5
+            servo2{PWM(PWM::pwm1, 50),  ///< P2.0   Dustin
+                   PWM(PWM::pwm2, 50),  ///< P2.1   James
+                   PWM(PWM::pwm3, 50),  ///< P2.2
+                   PWM(PWM::pwm4, 50),  ///< P2.3
+                   PWM(PWM::pwm5, 50),  ///< P2.4
+                   PWM(PWM::pwm6, 50)}, ///< P2.5
+            min2{2.4,   ///< P2.0   Dustin
+                 2.4,   ///< P2.1   James
+                 5.0,   ///< P2.2
+                 5.0,   ///< P2.3
+                 5.0,   ///< P2.4
+                 5.0},  ///< P2.5
+            max2{12.6,  ///< P2.0   Dustin
+                 12.5,  ///< P2.1   James
+                 10.,   ///< P2.2
+                 10.,   ///< P2.3
+                 10.,   ///< P2.4
+                 10.},  ///< P2.5
+            deg2{180,   ///< P2.0   Dustin
+                 180,   ///< P2.1   James
+                 180,   ///< P2.2
+                 180,   ///< P2.3
+                 180,   ///< P2.4
+                 180},  ///< P2.5
+            PWM_QueueHandle(getSharedObject(PWM_QueueHandle_id)),   ///< PWM_QueueHandle
+            PWM_Timeout(10 * 1000 * portTICK_PERIOD_MS)             ///< 10 * 1000ms
         {
             /* Nothing to init */
         }
@@ -153,12 +168,18 @@ class motorTask : public scheduler_task
 
         bool run(void *p)
         {
-            set(p2_0, -90);
-            vTaskDelay(1000);
-            set(p2_0,   0);
-            vTaskDelay(1000);
-            set(p2_0,  90);
-            vTaskDelay(1000);
+            PWM_t degree;
+            if (xQueueReceive(PWM_QueueHandle, &degree, PWM_Timeout)) {
+                set(p2_0, degree.p2_0);
+                set(p2_1, degree.p2_1);
+                set(p2_2, degree.p2_2);
+                set(p2_3, degree.p2_3);
+                set(p2_4, degree.p2_4);
+                set(p2_5, degree.p2_5);
+            }
+            else {
+                std::cerr << "Warning: motorTask::run()->xQueueReceive() timed out after " << PWM_Timeout << " ticks" << std::endl;
+            }
             return true;
         }
 };

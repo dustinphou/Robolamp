@@ -26,7 +26,7 @@
 #include "tasks.hpp"
 #include "examples/examples.hpp"
 
-#include "iostream"
+#include "iostream"     ///< Todo: Handle errors with errorTask instead
 #include "lpc_pwm.hpp"
 
 struct CV_t
@@ -37,20 +37,32 @@ struct CV_t
         uint16_t framey;    // The vertical height of the frame. Ex: 1080
 };
 
+struct FRAME_t
+{
+        float coordx;   // The percentage horizontal coordinates of the point. Ex: Left = -100% | Right = +100%
+        float coordy;   // The percentage vertical coordinates of the point. Ex: Up = +100% | Down = -100%
+};
+
 struct PWM_t
 {
-        float p2_0;     // The PWM signal for P2.0
-        float p2_1;     // The PWM signal for P2.1
-        float p2_2;     // The PWM signal for P2.2
-        float p2_3;     // The PWM signal for P2.3
-        float p2_4;     // The PWM signal for P2.4
-        float p2_5;     // The PWM signal for P2.5
+        float p2_0;     // The PWM signal in degrees for P2.0
+        float p2_1;     // The PWM signal in degrees for P2.1
+        float p2_2;     // The PWM signal in degrees for P2.2
+        float p2_3;     // The PWM signal in degrees for P2.3
+        float p2_4;     // The PWM signal in degrees for P2.4
+        float p2_5;     // The PWM signal in degrees for P2.5
+};
+
+enum ERR_id
+{
+
 };
 
 enum sharedObject_id
 {
     CV_QueueHandle_id,
     PWM_QueueHandle_id,
+    ERR_QueueHandle_id,
 };
 
 /**
@@ -58,13 +70,16 @@ enum sharedObject_id
  */
 class CV_Core : public scheduler_task
 {
-        QueueHandle_t CV_QueueHandle;   ///< Contains incoming data of type ???
-        QueueHandle_t PWM_QueueHandle;  ///< Contains outgoing data of type PWM_t in degrees
+        QueueHandle_t CV_QueueHandle;       ///< Contains data of type CV_t from roboLampHandler to visionTask
+        QueueHandle_t FRAME_QueueHandle;    ///< Contains incoming data of type FRAME_t in percentages from visionTask
+        QueueHandle_t PWM_QueueHandle;      ///< Contains outgoing data of type PWM_t in degrees to motorTask
+//        QueueHandle_t ERR_QueueHandle;      ///< Contains data of type ERR_id from * to errorTask
 
     public:
         CV_Core(uint8_t priority) : scheduler_task("core", 2048, priority),
-            CV_QueueHandle(xQueueCreate(1, sizeof(CV_t))),  ///< CV_QueueHandle
-            PWM_QueueHandle(xQueueCreate(1, sizeof(PWM_t))) ///< PWM_QueueHandle
+            CV_QueueHandle(xQueueCreate(1, sizeof(CV_t))),          ///< CV_QueueHandle
+            FRAME_QueueHandle(xQueueCreate(2, sizeof(FRAME_t))),    ///< FRAME_QueueHandle
+            PWM_QueueHandle(xQueueCreate(1, sizeof(PWM_t)))         ///< PWM_QueueHandle
         {
             addSharedObject(CV_QueueHandle_id, CV_QueueHandle);
             addSharedObject(PWM_QueueHandle_id, PWM_QueueHandle);
@@ -180,6 +195,23 @@ class motorTask : public scheduler_task
             else {
                 std::cerr << "Warning: motorTask::run()->xQueueReceive() timed out after " << PWM_Timeout << " ticks" << std::endl;
             }
+            return true;
+        }
+};
+
+/**
+ * errorTask controls all error signals.
+ */
+class errorTask : public scheduler_task
+{
+    public:
+        errorTask(uint8_t priority) : scheduler_task("error", 2048, priority)
+        {
+            /* Nothing to init */
+        }
+
+        bool run(void *p)
+        {
             return true;
         }
 };

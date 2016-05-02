@@ -29,41 +29,7 @@
 #include "iostream"     ///< Todo: Handle errors with errorTask instead
 #include "lpc_pwm.hpp"
 
-struct CV_t
-{
-        uint16_t coordx;    // The horizontal coordinates of the point. Ex: 123
-        uint16_t coordy;    // The vertical coordinates of the point. Ex: 456
-        uint16_t framex;    // The horizontal width of the frame. Ex: 1920
-        uint16_t framey;    // The vertical height of the frame. Ex: 1080
-};
-
-struct FRAME_t
-{
-        float coordx;   // The percentage horizontal coordinates of the point. Ex: Left = -100% | Right = +100%
-        float coordy;   // The percentage vertical coordinates of the point. Ex: Up = +100% | Down = -100%
-};
-
-struct PWM_t
-{
-        float p2_0;     // The PWM signal in degrees for P2.0
-        float p2_1;     // The PWM signal in degrees for P2.1
-        float p2_2;     // The PWM signal in degrees for P2.2
-        float p2_3;     // The PWM signal in degrees for P2.3
-        float p2_4;     // The PWM signal in degrees for P2.4
-        float p2_5;     // The PWM signal in degrees for P2.5
-};
-
-enum ERR_id
-{
-
-};
-
-enum sharedObject_id
-{
-    CV_QueueHandle_id,
-    PWM_QueueHandle_id,
-    ERR_QueueHandle_id,
-};
+#include "cvtypes.hpp"  ///< Contains all structures and enumerations used by CV_Core
 
 /**
  * CV_Core is the brain of all logic.
@@ -100,14 +66,29 @@ class CV_Core : public scheduler_task
  */
 class visionTask : public scheduler_task
 {
+        QueueHandle_t CV_QueueHandle;       ///< Contains incoming data of type CV_t from roboLampHandler
+        TickType_t CV_ReadTimeout;          ///< Max xTicksToWait for xQueueReceive
+        QueueHandle_t FRAME_QueueHandle;    ///< Contains outgoing data of type FRAME_t to CV_Core
+        TickType_t FRAME_SendTimeout;       ///< Max xTicksToWait for xQueueSend
+
     public:
-        visionTask(uint8_t priority) : scheduler_task("vision", 2048, priority)
+        visionTask(uint8_t priority) : scheduler_task("vision", 2048, priority),
+            CV_QueueHandle(getSharedObject(CV_QueueHandle_id)),         ///< CV_QueueHandle
+            CV_ReadTimeout(10 * 1000 * portTICK_PERIOD_MS),             ///< 10 * 1000ms
+            FRAME_QueueHandle(getSharedObject(FRAME_QueueHandle_id)),   ///< FRAME_QueueHandle
+            FRAME_SendTimeout(0 * portTICK_PERIOD_MS)                   ///< 0ms
         {
             /* Nothing to init */
         }
 
         bool run(void *p)
         {
+            CV_t raw;
+            FRAME_t frame;
+            if(pdTRUE == xQueueReceive(CV_QueueHandle, &raw, CV_ReadTimeout))
+                    ; //Todo: Here
+
+            xQueueSend(FRAME_QueueHandle, &frame, FRAME_SendTimeout);
             return true;
         }
 };
@@ -130,7 +111,7 @@ class motorTask : public scheduler_task
             p2_5 = 5,
         };
         QueueHandle_t PWM_QueueHandle;  ///< Contains incoming data of type PWM_t in degrees
-        TickType_t PWM_Timeout;         ///< Max xTicksToWait for xQueueReceive
+        TickType_t PWM_ReceiveTimeout;  ///< Max xTicksToWait for xQueueReceive
 
     public:
         motorTask(uint8_t priority) : scheduler_task("motor", 2048, priority),
@@ -159,7 +140,7 @@ class motorTask : public scheduler_task
                  180,   ///< P2.4
                  180},  ///< P2.5
             PWM_QueueHandle(getSharedObject(PWM_QueueHandle_id)),   ///< PWM_QueueHandle
-            PWM_Timeout(10 * 1000 * portTICK_PERIOD_MS)             ///< 10 * 1000ms
+            PWM_ReceiveTimeout(10 * 1000 * portTICK_PERIOD_MS)      ///< 10 * 1000ms
         {
             /* Nothing to init */
         }
@@ -184,7 +165,7 @@ class motorTask : public scheduler_task
         bool run(void *p)
         {
             PWM_t degree;
-            if (xQueueReceive(PWM_QueueHandle, &degree, PWM_Timeout)) {
+            if (pdTRUE == xQueueReceive(PWM_QueueHandle, &degree, PWM_ReceiveTimeout)) {
                 set(p2_0, degree.p2_0);
                 set(p2_1, degree.p2_1);
                 set(p2_2, degree.p2_2);
@@ -192,8 +173,8 @@ class motorTask : public scheduler_task
                 set(p2_4, degree.p2_4);
                 set(p2_5, degree.p2_5);
             }
-            else {
-                std::cerr << "Warning: motorTask::run()->xQueueReceive() timed out after " << PWM_Timeout << " ticks" << std::endl;
+            else /* errQUEUE_EMPTY */ {
+                std::cerr << "Warning: motorTask::run()->xQueueReceive() timed out after " << PWM_ReceiveTimeout << " ticks" << std::endl;
             }
             return true;
         }

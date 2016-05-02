@@ -45,18 +45,21 @@
 #include "c_tlm_stream.h"
 #include "c_tlm_var.h"
 
+#include "tasks.hpp"
+#include "cvtypes.hpp"
+
 CMD_HANDLER_FUNC(roboLampHandler)
 {
-    uint16_t coordx;    // The horizontal coordinates of the point. Ex: 123
-    uint16_t coordy;    // The vertical coordinates of the point. Ex: 456
-    uint16_t framex;    // The horizontal width of the frame. Ex: 1920
-    uint16_t framey;    // The vertical height of the frame. Ex: 1080
-    if (cmdParams.scanf("%5hux%5hu %5hux%5hu", &coordx, &coordy, &framex, &framey) != 4) {
-        output.putline("Syntax Error: Usage is 'cv 123x456 1920x1080'");
-        return false;
+    CV_t raw;
+    TickType_t CV_SendTimeout = 0 * portTICK_PERIOD_MS; // 0ms
+    if (cmdParams.scanf("%5hux%5hu %5hux%5hu", &(raw.coordx), &(raw.coordy), &(raw.framex), &(raw.framey)) != 4) {
+        output.putline("Syntax Error: Usage is 'cv 123x456 1920x1080'");    // Todo: Use errorTask instead
+        return true;
     }
-    /* Do something */
-//    xQueueSend(getSharedObject(PWM_QueueHandle_id), &degree, PWM_Timeout)
+    if (errQUEUE_FULL == xQueueSend(scheduler_task::getSharedObject(CV_QueueHandle_id), &raw, CV_SendTimeout)) {
+        output.putline("Warning: roboLampHandler->xQueueSend() timed out after ### ticks"); // Todo: Use errorTask instead
+        return true;
+    }
     return true;
 }
 

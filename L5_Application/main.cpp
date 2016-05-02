@@ -44,7 +44,7 @@ class CV_Core : public scheduler_task
     public:
         CV_Core(uint8_t priority) : scheduler_task("core", 2048, priority),
             CV_QueueHandle(xQueueCreate(1, sizeof(CV_t))),          ///< CV_QueueHandle
-            FRAME_QueueHandle(xQueueCreate(2, sizeof(FRAME_t))),    ///< FRAME_QueueHandle
+            FRAME_QueueHandle(xQueueCreate(4, sizeof(FRAME_t))),    ///< FRAME_QueueHandle
             PWM_QueueHandle(xQueueCreate(1, sizeof(PWM_t)))         ///< PWM_QueueHandle
         {
             addSharedObject(CV_QueueHandle_id, CV_QueueHandle);
@@ -74,7 +74,7 @@ class visionTask : public scheduler_task
     public:
         visionTask(uint8_t priority) : scheduler_task("vision", 2048, priority),
             CV_QueueHandle(getSharedObject(CV_QueueHandle_id)),         ///< CV_QueueHandle
-            CV_ReadTimeout(10 * 1000 * portTICK_PERIOD_MS),             ///< 10 * 1000ms
+            CV_ReadTimeout(1 * 1000 * portTICK_PERIOD_MS),              ///< 1 * 1000ms
             FRAME_QueueHandle(getSharedObject(FRAME_QueueHandle_id)),   ///< FRAME_QueueHandle
             FRAME_SendTimeout(0 * portTICK_PERIOD_MS)                   ///< 0ms
         {
@@ -85,10 +85,15 @@ class visionTask : public scheduler_task
         {
             CV_t raw;
             FRAME_t frame;
-            if(pdTRUE == xQueueReceive(CV_QueueHandle, &raw, CV_ReadTimeout))
-                    ; //Todo: Here
-
-            xQueueSend(FRAME_QueueHandle, &frame, FRAME_SendTimeout);
+            if (pdTRUE == xQueueReceive(CV_QueueHandle, &raw, CV_ReadTimeout)) {
+                frame.coordx = ((((float)raw.coordx/(float)raw.framex)*(200))-(100));
+                frame.coordy = ((((float)raw.coordx/(float)raw.framex)*(200))-(100));
+                if (errQUEUE_FULL == xQueueSend(FRAME_QueueHandle, &frame, FRAME_SendTimeout))
+                    std::cerr << "Warning: visionTask::run()->xQueueSend() timed out after " << FRAME_SendTimeout << " ticks" << std::endl;
+            }
+            else /* errQUEUE_Empty */ {
+                std::cerr << "Warning: visionTask::run()->xQueueReceive() timed out after " << CV_ReadTimeout << " ticks" << std::endl;
+            }
             return true;
         }
 };
@@ -105,7 +110,7 @@ class motorTask : public scheduler_task
         enum pwmNum {
             p2_0 = 0,   ///< Dustin
             p2_1 = 1,   ///< James
-            p2_2 = 2,
+            p2_2 = 2,   ///< Brandon
             p2_3 = 3,
             p2_4 = 4,
             p2_5 = 5,
@@ -115,32 +120,32 @@ class motorTask : public scheduler_task
 
     public:
         motorTask(uint8_t priority) : scheduler_task("motor", 2048, priority),
-            servo2{PWM(PWM::pwm1, 50),  ///< P2.0   Dustin
-                   PWM(PWM::pwm2, 50),  ///< P2.1   James
-                   PWM(PWM::pwm3, 50),  ///< P2.2
+            servo2{PWM(PWM::pwm1, 50),  ///< P2.0 Dustin
+                   PWM(PWM::pwm2, 50),  ///< P2.1 James
+                   PWM(PWM::pwm3, 50),  ///< P2.2 Brandon
                    PWM(PWM::pwm4, 50),  ///< P2.3
                    PWM(PWM::pwm5, 50),  ///< P2.4
                    PWM(PWM::pwm6, 50)}, ///< P2.5
-            min2{2.4,   ///< P2.0   Dustin
-                 2.4,   ///< P2.1   James
-                 5.0,   ///< P2.2
+            min2{2.5,   ///< P2.0 Dustin (2.4)
+                 2.5,   ///< P2.1 James (2.4)
+                 2.5,   ///< P2.2 Brandon (2.4)
                  5.0,   ///< P2.3
                  5.0,   ///< P2.4
                  5.0},  ///< P2.5
-            max2{12.6,  ///< P2.0   Dustin
-                 12.5,  ///< P2.1   James
-                 10.,   ///< P2.2
-                 10.,   ///< P2.3
-                 10.,   ///< P2.4
-                 10.},  ///< P2.5
-            deg2{180,   ///< P2.0   Dustin
-                 180,   ///< P2.1   James
-                 180,   ///< P2.2
+            max2{12.5,  ///< P2.0 Dustin (12.4)
+                 12.4,  ///< P2.1 James (12.4)
+                 12.4,  ///< P2.2 Brandon (12.4)
+                 10.0,  ///< P2.3
+                 10.0,  ///< P2.4
+                 10.0}, ///< P2.5
+            deg2{180,   ///< P2.0 Dustin
+                 180,   ///< P2.1 James
+                 180,   ///< P2.2 Brandon
                  180,   ///< P2.3
                  180,   ///< P2.4
                  180},  ///< P2.5
             PWM_QueueHandle(getSharedObject(PWM_QueueHandle_id)),   ///< PWM_QueueHandle
-            PWM_ReceiveTimeout(10 * 1000 * portTICK_PERIOD_MS)      ///< 10 * 1000ms
+            PWM_ReceiveTimeout(1 * 1000 * portTICK_PERIOD_MS)       ///< 1 * 1000ms
         {
             /* Nothing to init */
         }
@@ -159,7 +164,7 @@ class motorTask : public scheduler_task
         {
             if (degree < -deg2[pinNum]/2 || degree > deg2[pinNum]/2)
                 return false;
-            return servo2[pinNum].set(((max2[pinNum]+min2[pinNum])/2)+((degree/(deg2[pinNum]/2))*((max2[pinNum]-min2[pinNum])/2)));
+            return servo2[pinNum].set(((degree/(deg2[pinNum]/2))*((max2[pinNum]-min2[pinNum])/2))+((max2[pinNum]+min2[pinNum])/2));
         }
 
         bool run(void *p)

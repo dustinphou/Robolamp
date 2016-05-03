@@ -39,24 +39,41 @@ class CV_Core : public scheduler_task
         QueueHandle_t CV_QueueHandle;       ///< Contains data of type CV_t from roboLampHandler to visionTask
         QueueHandle_t FRAME_QueueHandle;    ///< Contains incoming data of type FRAME_t in percentages from visionTask
         QueueHandle_t PWM_QueueHandle;      ///< Contains outgoing data of type PWM_t in degrees to motorTask
-//        QueueHandle_t ERR_QueueHandle;      ///< Contains data of type ERR_id from * to errorTask
+        QueueHandle_t ERR_QueueHandle;      ///< Contains data of type ERR_id from * to errorTask
+        TickType_t FRAME_ReadTimeout;       ///< Max xTicksToWait for xQueueReceive
+        TickType_t PWM_SendTimeout;         ///< Max xTicksToWait for xQueueSend
 
     public:
         CV_Core(uint8_t priority) : scheduler_task("core", 2048, priority),
             CV_QueueHandle(xQueueCreate(1, sizeof(CV_t))),          ///< CV_QueueHandle
             FRAME_QueueHandle(xQueueCreate(4, sizeof(FRAME_t))),    ///< FRAME_QueueHandle
-            PWM_QueueHandle(xQueueCreate(1, sizeof(PWM_t)))         ///< PWM_QueueHandle
+            PWM_QueueHandle(xQueueCreate(1, sizeof(PWM_t))),        ///< PWM_QueueHandle
+            ERR_QueueHandle(xQueueCreate(1, sizeof(ERR_id))),       ///< ERR_QueueHandle
+            FRAME_ReadTimeout(1 * 1000 * portTICK_PERIOD_MS),       ///< 1 * 1000ms
+            PWM_SendTimeout(0 * portTICK_PERIOD_MS)                 ///< 0ms
         {
             addSharedObject(CV_QueueHandle_id, CV_QueueHandle);
+            addSharedObject(FRAME_QueueHandle_id, FRAME_QueueHandle);
             addSharedObject(PWM_QueueHandle_id, PWM_QueueHandle);
+            addSharedObject(PWM_QueueHandle_id, ERR_QueueHandle);
         }
 
         bool run(void *p)
         {
-//            if (xQueueSend(PWM_QueueHandle, &degree, PWM_Timeout))
-//                ;
-//            else
-//                ;
+            FRAME_t frame;
+            PWM_t degree;
+            if (pdTRUE == xQueueReceive(FRAME_QueueHandle, &frame, FRAME_ReadTimeout)) {
+
+                // Todo: Logic <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+
+
+                if (errQUEUE_FULL == xQueueSend(PWM_QueueHandle, &degree, PWM_SendTimeout))
+                    std::cerr << "Warning: CV_Core::run()->xQueueSend() timed out after " << PWM_SendTimeout << " ticks" << std::endl;
+            }
+            else /* errQUEUE_Empty */ {
+                std::cerr << "Warning: CV_Core::run()->xQueueReceive() timed out after " << FRAME_ReadTimeout << " ticks" << std::endl;
+            }
             return true;
         }
 };
@@ -67,15 +84,15 @@ class CV_Core : public scheduler_task
 class visionTask : public scheduler_task
 {
         QueueHandle_t CV_QueueHandle;       ///< Contains incoming data of type CV_t from roboLampHandler
-        TickType_t CV_ReadTimeout;          ///< Max xTicksToWait for xQueueReceive
         QueueHandle_t FRAME_QueueHandle;    ///< Contains outgoing data of type FRAME_t to CV_Core
+        TickType_t CV_ReadTimeout;          ///< Max xTicksToWait for xQueueReceive
         TickType_t FRAME_SendTimeout;       ///< Max xTicksToWait for xQueueSend
 
     public:
         visionTask(uint8_t priority) : scheduler_task("vision", 2048, priority),
             CV_QueueHandle(getSharedObject(CV_QueueHandle_id)),         ///< CV_QueueHandle
-            CV_ReadTimeout(1 * 1000 * portTICK_PERIOD_MS),              ///< 1 * 1000ms
             FRAME_QueueHandle(getSharedObject(FRAME_QueueHandle_id)),   ///< FRAME_QueueHandle
+            CV_ReadTimeout(1 * 1000 * portTICK_PERIOD_MS),              ///< 1 * 1000ms
             FRAME_SendTimeout(0 * portTICK_PERIOD_MS)                   ///< 0ms
         {
             /* Nothing to init */

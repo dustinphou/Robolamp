@@ -51,11 +51,11 @@
 CMD_HANDLER_FUNC(roboLampHandler)
 {
     CV_t raw;
-    TickType_t CV_SendTimeout = 0 * portTICK_PERIOD_MS; // 0ms
-    if (cmdParams.scanf("%5hux%5hu %5hux%5hu", &(raw.coordx), &(raw.coordy), &(raw.framex), &(raw.framey)) != 4) {
+    if (4 != cmdParams.scanf("%5hux%5hu %5hux%5hu", &(raw.coordx), &(raw.coordy), &(raw.framex), &(raw.framey))) {
         output.putline("Syntax Error: Usage is 'cv 123x456 1920x1080'");    // Todo: Use errorTask instead
         return true;
     }
+    TickType_t CV_SendTimeout = 0 * portTICK_PERIOD_MS; // 0ms
     if (errQUEUE_FULL == xQueueSend(scheduler_task::getSharedObject(CV_QueueHandle_id), &raw, CV_SendTimeout)) {
         output.putline("Warning: roboLampHandler->xQueueSend() timed out after ### ticks"); // Todo: Use errorTask instead
         return true;

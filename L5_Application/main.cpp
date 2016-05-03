@@ -42,6 +42,7 @@ class CV_Core : public scheduler_task
         QueueHandle_t ERR_QueueHandle;      ///< Contains data of type ERR_id from * to errorTask
         TickType_t FRAME_ReadTimeout;       ///< Max xTicksToWait for xQueueReceive
         TickType_t PWM_SendTimeout;         ///< Max xTicksToWait for xQueueSend
+        PWM_t PWM_Degree;                   ///< Previous PWM_t to motorTask
 
     public:
         CV_Core(uint8_t priority) : scheduler_task("core", 2048, priority),
@@ -50,7 +51,13 @@ class CV_Core : public scheduler_task
             PWM_QueueHandle(xQueueCreate(1, sizeof(PWM_t))),        ///< PWM_QueueHandle
             ERR_QueueHandle(xQueueCreate(1, sizeof(ERR_id))),       ///< ERR_QueueHandle
             FRAME_ReadTimeout(1 * 1000 * portTICK_PERIOD_MS),       ///< 1 * 1000ms
-            PWM_SendTimeout(0 * portTICK_PERIOD_MS)                 ///< 0ms
+            PWM_SendTimeout(0 * portTICK_PERIOD_MS),                ///< 0ms
+            PWM_Degree{0,   ///< Initial degrees for p2_0
+                       0,   ///< Initial degrees for p2_1
+                       0,   ///< Initial degrees for p2_2
+                       0,   ///< Initial degrees for p2_3
+                       0,   ///< Initial degrees for p2_4
+                       0}   ///< Initial degrees for p2_5
         {
             addSharedObject(CV_QueueHandle_id, CV_QueueHandle);
             addSharedObject(FRAME_QueueHandle_id, FRAME_QueueHandle);
@@ -61,14 +68,13 @@ class CV_Core : public scheduler_task
         bool run(void *p)
         {
             FRAME_t frame;
-            PWM_t degree;
             if (pdTRUE == xQueueReceive(FRAME_QueueHandle, &frame, FRAME_ReadTimeout)) {
 
-                // Todo: Logic <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+                // Todo: Logic & Limits <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+                PWM_Degree.p2_0 += frame.coordx / 100;   ///< Base Servo
+                PWM_Degree.p2_1 += frame.coordy / 100;   ///< Camera Servo
 
-
-
-                if (errQUEUE_FULL == xQueueSend(PWM_QueueHandle, &degree, PWM_SendTimeout))
+                if (errQUEUE_FULL == xQueueSend(PWM_QueueHandle, &PWM_Degree, PWM_SendTimeout))
                     std::cerr << "Warning: CV_Core::run()->xQueueSend() timed out after " << PWM_SendTimeout << " ticks" << std::endl;
             }
             else /* errQUEUE_Empty */ {
@@ -238,6 +244,7 @@ int main(void)
     scheduler_add_task(new CV_Core(PRIORITY_LOW));
     scheduler_add_task(new visionTask(PRIORITY_MEDIUM));
     scheduler_add_task(new motorTask(PRIORITY_MEDIUM));
+    scheduler_add_task(new errorTask(PRIORITY_MEDIUM));
 
     /**
      * A few basic tasks for this bare-bone system :

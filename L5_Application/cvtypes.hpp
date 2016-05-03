@@ -8,6 +8,8 @@
 #ifndef L5_APPLICATION_CVTYPES_HPP_
 #define L5_APPLICATION_CVTYPES_HPP_
 
+#include "tasks.hpp"
+
 struct CV_t
 {
         uint16_t coordx;    // The horizontal coordinates of the point. Ex: 123
@@ -32,11 +34,6 @@ struct PWM_t
         float p2_5;     // The PWM signal in degrees for P2.5
 };
 
-enum ERR_id
-{
-
-};
-
 enum sharedObject_id
 {
     CV_QueueHandle_id,
@@ -44,5 +41,23 @@ enum sharedObject_id
     PWM_QueueHandle_id,
     ERR_QueueHandle_id,
 };
+
+enum ERR_id
+{
+    roboLampHandler_cmdParams_scanf,
+    roboLampHandler_xQueueSendTo_visionTask,
+    visionTask_xQueueReceiveFrom_roboLampHandler,
+    visionTask_xQueueSendTo_CV_Core,
+    CV_Core_xQueueReceiveFrom_visionTask,
+    CV_Core_xQueueSendTo_motorTask,
+    motorTask_xQueueReceiveFrom_CV_Core,
+    errorTask_xQueueReceiveFrom_generic,
+};
+
+/**
+ * reportError reports an ERR_id to errorTask without ever blocking.
+ * Example: reportError(errorTask_xQueueReceiveFrom_generic);
+ */
+void reportError(ERR_id error);
 
 #endif /* L5_APPLICATION_CVTYPES_HPP_ */

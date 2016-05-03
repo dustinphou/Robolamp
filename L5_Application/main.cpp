@@ -27,6 +27,7 @@
 #include "examples/examples.hpp"
 
 #include "iostream"     ///< Todo: Handle errors with errorTask instead
+#include "io.hpp"
 #include "lpc_pwm.hpp"
 
 #include "cvtypes.hpp"  ///< Contains all structures and enumerations used by CV_Core
@@ -40,7 +41,7 @@ class CV_Core : public scheduler_task
         QueueHandle_t FRAME_QueueHandle;    ///< Contains incoming data of type FRAME_t in percentages from visionTask
         QueueHandle_t PWM_QueueHandle;      ///< Contains outgoing data of type PWM_t in degrees to motorTask
         QueueHandle_t ERR_QueueHandle;      ///< Contains data of type ERR_id from * to errorTask
-        TickType_t FRAME_ReadTimeout;       ///< Max xTicksToWait for xQueueReceive
+        TickType_t FRAME_ReceiveTimeout;    ///< Max xTicksToWait for xQueueReceive
         TickType_t PWM_SendTimeout;         ///< Max xTicksToWait for xQueueSend
         PWM_t PWM_Degree;                   ///< Previous PWM_t to motorTask
 
@@ -50,7 +51,7 @@ class CV_Core : public scheduler_task
             FRAME_QueueHandle(xQueueCreate(4, sizeof(FRAME_t))),    ///< FRAME_QueueHandle
             PWM_QueueHandle(xQueueCreate(1, sizeof(PWM_t))),        ///< PWM_QueueHandle
             ERR_QueueHandle(xQueueCreate(1, sizeof(ERR_id))),       ///< ERR_QueueHandle
-            FRAME_ReadTimeout(1 * 1000 * portTICK_PERIOD_MS),       ///< 1 * 1000ms
+            FRAME_ReceiveTimeout(1 * 1000 * portTICK_PERIOD_MS),    ///< 1 * 1000ms
             PWM_SendTimeout(0 * portTICK_PERIOD_MS),                ///< 0ms
             PWM_Degree{0,   ///< Initial degrees for p2_0
                        0,   ///< Initial degrees for p2_1
@@ -68,17 +69,17 @@ class CV_Core : public scheduler_task
         bool run(void *p)
         {
             FRAME_t frame;
-            if (pdTRUE == xQueueReceive(FRAME_QueueHandle, &frame, FRAME_ReadTimeout)) {
+            if (pdTRUE == xQueueReceive(FRAME_QueueHandle, &frame, FRAME_ReceiveTimeout)) {
 
                 // Todo: Logic & Limits <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
                 PWM_Degree.p2_0 += frame.coordx / 100;   ///< Base Servo
                 PWM_Degree.p2_1 += frame.coordy / 100;   ///< Camera Servo
 
                 if (errQUEUE_FULL == xQueueSend(PWM_QueueHandle, &PWM_Degree, PWM_SendTimeout))
-                    std::cerr << "Warning: CV_Core::run()->xQueueSend() timed out after " << PWM_SendTimeout << " ticks" << std::endl;
+                    reportError(CV_Core_xQueueSendTo_motorTask);
             }
             else /* errQUEUE_Empty */ {
-                std::cerr << "Warning: CV_Core::run()->xQueueReceive() timed out after " << FRAME_ReadTimeout << " ticks" << std::endl;
+                reportError(CV_Core_xQueueReceiveFrom_visionTask);
             }
             return true;
         }
@@ -91,14 +92,14 @@ class visionTask : public scheduler_task
 {
         QueueHandle_t CV_QueueHandle;       ///< Contains incoming data of type CV_t from roboLampHandler
         QueueHandle_t FRAME_QueueHandle;    ///< Contains outgoing data of type FRAME_t to CV_Core
-        TickType_t CV_ReadTimeout;          ///< Max xTicksToWait for xQueueReceive
+        TickType_t CV_ReceiveTimeout;       ///< Max xTicksToWait for xQueueReceive
         TickType_t FRAME_SendTimeout;       ///< Max xTicksToWait for xQueueSend
 
     public:
         visionTask(uint8_t priority) : scheduler_task("vision", 2048, priority),
             CV_QueueHandle(getSharedObject(CV_QueueHandle_id)),         ///< CV_QueueHandle
             FRAME_QueueHandle(getSharedObject(FRAME_QueueHandle_id)),   ///< FRAME_QueueHandle
-            CV_ReadTimeout(1 * 1000 * portTICK_PERIOD_MS),              ///< 1 * 1000ms
+            CV_ReceiveTimeout(1 * 1000 * portTICK_PERIOD_MS),           ///< 1 * 1000ms
             FRAME_SendTimeout(0 * portTICK_PERIOD_MS)                   ///< 0ms
         {
             /* Nothing to init */
@@ -108,14 +109,14 @@ class visionTask : public scheduler_task
         {
             CV_t raw;
             FRAME_t frame;
-            if (pdTRUE == xQueueReceive(CV_QueueHandle, &raw, CV_ReadTimeout)) {
+            if (pdTRUE == xQueueReceive(CV_QueueHandle, &raw, CV_ReceiveTimeout)) {
                 frame.coordx = ((((float)raw.coordx/(float)raw.framex)*(200))-(100));
                 frame.coordy = ((((float)raw.coordx/(float)raw.framex)*(200))-(100));
                 if (errQUEUE_FULL == xQueueSend(FRAME_QueueHandle, &frame, FRAME_SendTimeout))
-                    std::cerr << "Warning: visionTask::run()->xQueueSend() timed out after " << FRAME_SendTimeout << " ticks" << std::endl;
+                    reportError(visionTask_xQueueSendTo_CV_Core);
             }
             else /* errQUEUE_Empty */ {
-                std::cerr << "Warning: visionTask::run()->xQueueReceive() timed out after " << CV_ReadTimeout << " ticks" << std::endl;
+                reportError(visionTask_xQueueReceiveFrom_roboLampHandler);
             }
             return true;
         }
@@ -202,7 +203,7 @@ class motorTask : public scheduler_task
                 set(p2_5, degree.p2_5);
             }
             else /* errQUEUE_EMPTY */ {
-                std::cerr << "Warning: motorTask::run()->xQueueReceive() timed out after " << PWM_ReceiveTimeout << " ticks" << std::endl;
+                reportError(motorTask_xQueueReceiveFrom_CV_Core);
             }
             return true;
         }
@@ -213,14 +214,69 @@ class motorTask : public scheduler_task
  */
 class errorTask : public scheduler_task
 {
+        QueueHandle_t ERR_QueueHandle;  ///< Contains incoming data of type ERR_id
+        TickType_t ERR_ReadTimeout;     ///< Max xTicksToWait for xQueueReceive
+        TickType_t ERR_DisplayDuration; ///< Minimum xTicksToDelay LED Display update
+
     public:
-        errorTask(uint8_t priority) : scheduler_task("error", 2048, priority)
+        errorTask(uint8_t priority) : scheduler_task("error", 2048, priority),
+            ERR_QueueHandle(getSharedObject(ERR_QueueHandle_id)),   ///< ERR_QueueHandle
+            ERR_ReadTimeout(portMAX_DELAY),                         ///< (2^32)-1 ticks
+            ERR_DisplayDuration(10 * 1000 * portTICK_PERIOD_MS)     ///< 10 * 1000ms
         {
-            /* Nothing to init */
+            LD.clear();
+        }
+
+        /**
+         * Sets the LED Display to a two character value.
+         * Example: LED_Display("HI");
+         */
+        void LED_Display(const char *value)
+        {
+            LD.setLeftDigit(value[0]);
+            LD.setRightDigit(value[1]);
         }
 
         bool run(void *p)
         {
+            ERR_id error;
+            if (pdTRUE == xQueueReceive(ERR_QueueHandle, &error, ERR_ReadTimeout)) {
+                switch (error) {
+                    case roboLampHandler_cmdParams_scanf:
+                        LED_Display("HI");
+                        break;
+                    case roboLampHandler_xQueueSendTo_visionTask:
+                        LED_Display("HO");
+                        break;
+                    case visionTask_xQueueReceiveFrom_roboLampHandler:
+                        LED_Display("VI");
+                        break;
+                    case visionTask_xQueueSendTo_CV_Core:
+                        LED_Display("VO");
+                        break;
+                    case CV_Core_xQueueReceiveFrom_visionTask:
+                        LED_Display("CI");
+                        break;
+                    case CV_Core_xQueueSendTo_motorTask:
+                        LED_Display("CO");
+                        break;
+                    case motorTask_xQueueReceiveFrom_CV_Core:
+                        LED_Display("MI");
+                        break;
+                    case errorTask_xQueueReceiveFrom_generic:
+                        LED_Display("EI");
+                        break;
+                    default:
+                        LED_Display("??");
+                        break;
+                }
+                vTaskDelay(ERR_DisplayDuration);
+                xQueueReset(ERR_QueueHandle);   ///< Always returns pdPASS here
+                LD.clear();
+            }
+            else {
+                reportError(errorTask_xQueueReceiveFrom_generic);
+            }
             return true;
         }
 };

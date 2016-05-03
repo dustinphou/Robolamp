@@ -26,7 +26,6 @@
 #include "tasks.hpp"
 #include "examples/examples.hpp"
 
-#include "iostream"     ///< Todo: Handle errors with errorTask instead
 #include "io.hpp"
 #include "lpc_pwm.hpp"
 

@@ -62,7 +62,7 @@ class CV_Core : public scheduler_task
             addSharedObject(CV_QueueHandle_id, CV_QueueHandle);
             addSharedObject(FRAME_QueueHandle_id, FRAME_QueueHandle);
             addSharedObject(PWM_QueueHandle_id, PWM_QueueHandle);
-            addSharedObject(PWM_QueueHandle_id, ERR_QueueHandle);
+            addSharedObject(ERR_QueueHandle_id, ERR_QueueHandle);
         }
 
         bool run(void *p)

@@ -194,12 +194,18 @@ class motorTask : public scheduler_task
         {
             PWM_t degree;
             if (pdTRUE == xQueueReceive(PWM_QueueHandle, &degree, PWM_ReceiveTimeout)) {
-                set(p2_0, degree.p2_0);
-                set(p2_1, degree.p2_1);
-                set(p2_2, degree.p2_2);
-                set(p2_3, degree.p2_3);
-                set(p2_4, degree.p2_4);
-                set(p2_5, degree.p2_5);
+                if (false == set(p2_0, degree.p2_0))
+                    reportError(motorTask_setDegreeExceedLimit_p2_0);
+                if (false == set(p2_1, degree.p2_1))
+                    reportError(motorTask_setDegreeExceedLimit_p2_1);
+                if (false == set(p2_2, degree.p2_2))
+                    reportError(motorTask_setDegreeExceedLimit_p2_2);
+                if (false == set(p2_3, degree.p2_3))
+                    reportError(motorTask_setDegreeExceedLimit_p2_3);
+                if (false == set(p2_4, degree.p2_4))
+                    reportError(motorTask_setDegreeExceedLimit_p2_4);
+                if (false == set(p2_5, degree.p2_5))
+                    reportError(motorTask_setDegreeExceedLimit_p2_5);
             }
             else /* errQUEUE_EMPTY */ {
                 reportError(motorTask_xQueueReceiveFrom_CV_Core);
@@ -261,6 +267,24 @@ class errorTask : public scheduler_task
                         break;
                     case motorTask_xQueueReceiveFrom_CV_Core:
                         LED_Display("MI");
+                        break;
+                    case motorTask_setDegreeExceedLimit_p2_0:
+                        LED_Display("P0");
+                        break;
+                    case motorTask_setDegreeExceedLimit_p2_1:
+                        LED_Display("P1");
+                        break;
+                    case motorTask_setDegreeExceedLimit_p2_2:
+                        LED_Display("P2");
+                        break;
+                    case motorTask_setDegreeExceedLimit_p2_3:
+                        LED_Display("P3");
+                        break;
+                    case motorTask_setDegreeExceedLimit_p2_4:
+                        LED_Display("P4");
+                        break;
+                    case motorTask_setDegreeExceedLimit_p2_5:
+                        LED_Display("P5");
                         break;
                     case errorTask_xQueueReceiveFrom_generic:
                         LED_Display("EI");

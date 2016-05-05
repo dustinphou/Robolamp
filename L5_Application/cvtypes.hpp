@@ -51,6 +51,12 @@ enum ERR_id
     CV_Core_xQueueReceiveFrom_visionTask,
     CV_Core_xQueueSendTo_motorTask,
     motorTask_xQueueReceiveFrom_CV_Core,
+    motorTask_setDegreeExceedLimit_p2_0,
+    motorTask_setDegreeExceedLimit_p2_1,
+    motorTask_setDegreeExceedLimit_p2_2,
+    motorTask_setDegreeExceedLimit_p2_3,
+    motorTask_setDegreeExceedLimit_p2_4,
+    motorTask_setDegreeExceedLimit_p2_5,
     errorTask_xQueueReceiveFrom_generic,
 };
 

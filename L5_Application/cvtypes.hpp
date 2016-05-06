@@ -26,12 +26,12 @@ struct FRAME_t
 
 struct PWM_t
 {
-        float p2_0;     // The PWM signal in degrees for P2.0
-        float p2_1;     // The PWM signal in degrees for P2.1
-        float p2_2;     // The PWM signal in degrees for P2.2
-        float p2_3;     // The PWM signal in degrees for P2.3
-        float p2_4;     // The PWM signal in degrees for P2.4
-        float p2_5;     // The PWM signal in degrees for P2.5
+        float p2_0;     // The PWM signal in degrees for P2.0 Ex: (Clockwise = -90 | Counter-clockwise = +90) from the top of the motor
+        float p2_1;     // The PWM signal in degrees for P2.1 Ex: (Clockwise = -90 | Counter-clockwise = +90) from the top of the motor
+        float p2_2;     // The PWM signal in degrees for P2.2 Ex: (Clockwise = -90 | Counter-clockwise = +90) from the top of the motor
+        float p2_3;     // The PWM signal in degrees for P2.3 Ex: (Clockwise = -90 | Counter-clockwise = +90) from the top of the motor
+        float p2_4;     // The PWM signal in degrees for P2.4 Ex: (Clockwise = -90 | Counter-clockwise = +90) from the top of the motor
+        float p2_5;     // The PWM signal in degrees for P2.5 Ex: (Clockwise = -90 | Counter-clockwise = +90) from the top of the motor
 };
 
 enum sharedObject_id

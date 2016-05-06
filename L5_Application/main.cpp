@@ -71,8 +71,8 @@ class CV_Core : public scheduler_task
             if (pdTRUE == xQueueReceive(FRAME_QueueHandle, &frame, FRAME_ReceiveTimeout)) {
 
                 // Todo: Logic & Limits <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-                PWM_Degree.p2_0 += frame.coordx / 1;    ///< Base Servo
-                PWM_Degree.p2_1 += frame.coordy / 1;    ///< Camera Servo
+                PWM_Degree.p2_0 -= frame.coordx / 100;  ///< Base Servo (Inverted Directionality)
+                PWM_Degree.p2_1 += frame.coordy / 100;  ///< Camera Servo (Todo: Undefined Directionality)
                 if (PWM_Degree.p2_0 > 90)
                     PWM_Degree.p2_0 = 90;
                 if (PWM_Degree.p2_0 <-90)

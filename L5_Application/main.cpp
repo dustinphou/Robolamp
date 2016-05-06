@@ -71,8 +71,16 @@ class CV_Core : public scheduler_task
             if (pdTRUE == xQueueReceive(FRAME_QueueHandle, &frame, FRAME_ReceiveTimeout)) {
 
                 // Todo: Logic & Limits <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-                PWM_Degree.p2_0 += frame.coordx / 100;   ///< Base Servo
-                PWM_Degree.p2_1 += frame.coordy / 100;   ///< Camera Servo
+                PWM_Degree.p2_0 += frame.coordx / 1;    ///< Base Servo
+                PWM_Degree.p2_1 += frame.coordy / 1;    ///< Camera Servo
+                if (PWM_Degree.p2_0 > 90)
+                    PWM_Degree.p2_0 = 90;
+                if (PWM_Degree.p2_0 <-90)
+                    PWM_Degree.p2_0 =-90;
+                if (PWM_Degree.p2_1 > 90)
+                    PWM_Degree.p2_1 = 90;
+                if (PWM_Degree.p2_1 <-90)
+                    PWM_Degree.p2_1 =-90;
 
                 if (errQUEUE_FULL == xQueueSend(PWM_QueueHandle, &PWM_Degree, PWM_SendTimeout))
                     reportError(CV_Core_xQueueSendTo_motorTask);
@@ -149,15 +157,15 @@ class motorTask : public scheduler_task
                    PWM(PWM::pwm4, 50),  ///< P2.3
                    PWM(PWM::pwm5, 50),  ///< P2.4
                    PWM(PWM::pwm6, 50)}, ///< P2.5
-            min2{2.5,   ///< P2.0 Dustin (2.4)
-                 2.5,   ///< P2.1 James (2.4)
-                 2.5,   ///< P2.2 Brandon (2.4)
+            min2{2.5,   ///< P2.0 Dustin
+                 2.5,   ///< P2.1 James
+                 2.5,   ///< P2.2 Brandon
                  5.0,   ///< P2.3
                  5.0,   ///< P2.4
                  5.0},  ///< P2.5
-            max2{12.5,  ///< P2.0 Dustin (12.4)
-                 12.4,  ///< P2.1 James (12.4)
-                 12.4,  ///< P2.2 Brandon (12.4)
+            max2{12.5,  ///< P2.0 Dustin
+                 12.5,  ///< P2.1 James
+                 12.5,  ///< P2.2 Brandon
                  10.0,  ///< P2.3
                  10.0,  ///< P2.4
                  10.0}, ///< P2.5
@@ -185,9 +193,17 @@ class motorTask : public scheduler_task
          */
         bool set(pwmNum pinNum, float degree)
         {
-            if (degree < -deg2[pinNum]/2 || degree > deg2[pinNum]/2)
+            if (degree < -deg2[pinNum]/2) {
+                servo2[pinNum].set(min2[pinNum]);
                 return false;
-            return servo2[pinNum].set(((degree/(deg2[pinNum]/2))*((max2[pinNum]-min2[pinNum])/2))+((max2[pinNum]+min2[pinNum])/2));
+            }
+            else if (degree > deg2[pinNum]/2) {
+                servo2[pinNum].set(max2[pinNum]);
+                return false;
+            }
+            else {
+                return servo2[pinNum].set(((degree/(deg2[pinNum]/2))*((max2[pinNum]-min2[pinNum])/2))+((max2[pinNum]+min2[pinNum])/2));
+            }
         }
 
         bool run(void *p)

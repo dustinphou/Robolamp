@@ -59,10 +59,11 @@ class CV_Core : public scheduler_task
                        0,   ///< Initial degrees for p2_4
                        0}   ///< Initial degrees for p2_5
         {
-            addSharedObject(CV_QueueHandle_id, CV_QueueHandle);
-            addSharedObject(FRAME_QueueHandle_id, FRAME_QueueHandle);
-            addSharedObject(PWM_QueueHandle_id, PWM_QueueHandle);
-            addSharedObject(ERR_QueueHandle_id, ERR_QueueHandle);
+            addSharedObject(CV_QueueHandle_id, CV_QueueHandle);         ///< Shares CV_QueueHandle
+            addSharedObject(FRAME_QueueHandle_id, FRAME_QueueHandle);   ///< Shares FRAME_QueueHandle
+            addSharedObject(PWM_QueueHandle_id, PWM_QueueHandle);       ///< Shares PWM_QueueHandle
+            addSharedObject(ERR_QueueHandle_id, ERR_QueueHandle);       ///< Shares ERR_QueueHandle
+            xQueueSend(PWM_QueueHandle, &PWM_Degree, PWM_SendTimeout);  ///< Send initial PWM_t
         }
 
         bool run(void *p)
@@ -178,7 +179,14 @@ class motorTask : public scheduler_task
             PWM_QueueHandle(getSharedObject(PWM_QueueHandle_id)),   ///< PWM_QueueHandle
             PWM_ReceiveTimeout(1 * 1000 * portTICK_PERIOD_MS)       ///< 1 * 1000ms
         {
-            /* Nothing to init */
+            PWM_t init_degree;                                                  ///< Initial PWM state
+            xQueueReceive(PWM_QueueHandle, &init_degree, PWM_ReceiveTimeout);   ///< Get initial PWM state
+            set(p2_0, init_degree.p2_0);    ///< Set initial PWM state
+            set(p2_1, init_degree.p2_1);    ///< Set initial PWM state
+            set(p2_2, init_degree.p2_2);    ///< Set initial PWM state
+            set(p2_3, init_degree.p2_3);    ///< Set initial PWM state
+            set(p2_4, init_degree.p2_4);    ///< Set initial PWM state
+            set(p2_5, init_degree.p2_5);    ///< Set initial PWM state
         }
 
         /**
@@ -245,7 +253,7 @@ class errorTask : public scheduler_task
             ERR_ReadTimeout(portMAX_DELAY),                         ///< (2^32)-1 ticks
             ERR_DisplayDuration(10 * 1000 * portTICK_PERIOD_MS)     ///< 10 * 1000ms
         {
-            LD.clear();
+            LD.clear();     ///< Begin with blank LED Display
         }
 
         /**

@@ -88,6 +88,8 @@ class CV_Core : public scheduler_task
 
                     if (errQUEUE_FULL == xQueueSend(PWM_QueueHandle, &PWM_BaseDegree, PWM_SendTimeout))
                         reportError(CV_Core_xQueueSend_To_motorTask);
+                    if (errQUEUE_FULL == xQueueSend(PWM_QueueHandle, &PWM_HeadDegree, PWM_SendTimeout))
+                        reportError(CV_Core_xQueueSend_To_motorTask);
                 }
                 else /* errQUEUE_Empty */ {
                     reportError(CV_Core_xQueueReceive_From_visionTask);

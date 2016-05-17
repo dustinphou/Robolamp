@@ -57,7 +57,7 @@ CMD_HANDLER_FUNC(roboLampHandler)
     }
     TickType_t CV_SendTimeout = 0 * portTICK_PERIOD_MS; // 0ms
     if (errQUEUE_FULL == xQueueSend(scheduler_task::getSharedObject(CV_QueueHandle_id), &raw, CV_SendTimeout)) {
-        reportError(roboLampHandler_xQueueSendTo_visionTask);
+        reportError(roboLampHandler_xQueueSend_To_visionTask);
         return true;
     }
     return true;

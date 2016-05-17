@@ -38,11 +38,10 @@ class CV_Core : public scheduler_task
 {
         QueueHandle_t CV_QueueHandle;       ///< Contains data of type CV_t from roboLampHandler to visionTask
         QueueHandle_t FRAME_QueueHandle;    ///< Contains incoming data of type FRAME_t in percentages from visionTask
-        QueueHandle_t PWM_QueueHandle;      ///< Contains outgoing data of type PWM_t in degrees to motorTask
+        QueueHandle_t PWM_QueueHandle;      ///< Contains outgoing data of type PWM_t in degrees from CV_Core and LEDTask to PWMTask
         QueueHandle_t ERR_QueueHandle;      ///< Contains data of type ERR_id from * to errorTask
         TickType_t FRAME_ReceiveTimeout;    ///< Max xTicksToWait for xQueueReceive
         TickType_t PWM_SendTimeout;         ///< Max xTicksToWait for xQueueSend
-        PWM_t PWM_Degree;                   ///< Previous PWM_t to motorTask
 
     public:
         CV_Core(uint8_t priority) : scheduler_task("core", 2048, priority),
@@ -51,44 +50,72 @@ class CV_Core : public scheduler_task
             PWM_QueueHandle(xQueueCreate(1, sizeof(PWM_t))),        ///< PWM_QueueHandle
             ERR_QueueHandle(xQueueCreate(1, sizeof(ERR_id))),       ///< ERR_QueueHandle
             FRAME_ReceiveTimeout(1 * 1000 * portTICK_PERIOD_MS),    ///< 1 * 1000ms
-            PWM_SendTimeout(0 * portTICK_PERIOD_MS),                ///< 0ms
-            PWM_Degree{0,   ///< Initial degrees for p2_0
-                       0,   ///< Initial degrees for p2_1
-                       0,   ///< Initial degrees for p2_2
-                       0,   ///< Initial degrees for p2_3
-                       0,   ///< Initial degrees for p2_4
-                       0}   ///< Initial degrees for p2_5
+            PWM_SendTimeout(0 * portTICK_PERIOD_MS)                 ///< 0ms
         {
             addSharedObject(CV_QueueHandle_id, CV_QueueHandle);         ///< Shares CV_QueueHandle
             addSharedObject(FRAME_QueueHandle_id, FRAME_QueueHandle);   ///< Shares FRAME_QueueHandle
             addSharedObject(PWM_QueueHandle_id, PWM_QueueHandle);       ///< Shares PWM_QueueHandle
             addSharedObject(ERR_QueueHandle_id, ERR_QueueHandle);       ///< Shares ERR_QueueHandle
-            xQueueSend(PWM_QueueHandle, &PWM_Degree, PWM_SendTimeout);  ///< Send initial PWM_t
         }
 
         bool run(void *p)
         {
-            FRAME_t frame;
-            if (pdTRUE == xQueueReceive(FRAME_QueueHandle, &frame, FRAME_ReceiveTimeout)) {
+            PWM_t PWM_BaseDegree = {p2_0,       ///< Pin 2.0 (Base Servo)
+                                    pwmDegree,  ///< Value type is in degrees
+                                    0};         ///< Initial value
+            PWM_t PWM_HeadDegree = {p2_1,       ///< Pin 2.1 (Base Servo)
+                                    pwmDegree,  ///< Value type is in degrees
+                                    0};         ///< Initial value
+            xQueueSend(PWM_QueueHandle, &PWM_BaseDegree, PWM_SendTimeout);  ///< Send initial PWM_t
+            xQueueSend(PWM_QueueHandle, &PWM_HeadDegree, PWM_SendTimeout);  ///< Send initial PWM_t
 
-                // Todo: Logic & Limits <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-                PWM_Degree.p2_0 -= frame.coordx / 100;  ///< Base Servo (Inverted Directionality)
-                PWM_Degree.p2_1 += frame.coordy / 100;  ///< Camera Servo (Todo: Undefined Directionality)
-                if (PWM_Degree.p2_0 > 90)
-                    PWM_Degree.p2_0 = 90;
-                if (PWM_Degree.p2_0 <-90)
-                    PWM_Degree.p2_0 =-90;
-                if (PWM_Degree.p2_1 > 90)
-                    PWM_Degree.p2_1 = 90;
-                if (PWM_Degree.p2_1 <-90)
-                    PWM_Degree.p2_1 =-90;
+            for (;;)
+            {
+                FRAME_t frame;
+                if (pdTRUE == xQueueReceive(FRAME_QueueHandle, &frame, FRAME_ReceiveTimeout)) {
 
-                if (errQUEUE_FULL == xQueueSend(PWM_QueueHandle, &PWM_Degree, PWM_SendTimeout))
-                    reportError(CV_Core_xQueueSendTo_motorTask);
+                    // Todo: Logic & Limits <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+                    PWM_BaseDegree.value -= frame.coordx / 100;  ///< Base Servo (Inverted Directionality)
+                    PWM_HeadDegree.value += frame.coordy / 100;  ///< Camera Servo (Todo: Undefined Directionality)
+                    if (PWM_BaseDegree.value > 90)
+                        PWM_BaseDegree.value = 90;
+                    if (PWM_BaseDegree.value <-90)
+                        PWM_BaseDegree.value =-90;
+                    if (PWM_HeadDegree.value > 90)
+                        PWM_HeadDegree.value = 90;
+                    if (PWM_HeadDegree.value <-90)
+                        PWM_HeadDegree.value =-90;
+
+                    if (errQUEUE_FULL == xQueueSend(PWM_QueueHandle, &PWM_BaseDegree, PWM_SendTimeout))
+                        reportError(CV_Core_xQueueSend_To_motorTask);
+                }
+                else /* errQUEUE_Empty */ {
+                    reportError(CV_Core_xQueueReceive_From_visionTask);
+                }
             }
-            else /* errQUEUE_Empty */ {
-                reportError(CV_Core_xQueueReceiveFrom_visionTask);
-            }
+            return true;    // CV_Core should never return
+        }
+};
+
+/**
+ * LEDTask controls all LED signals.
+ */
+class LEDTask : public scheduler_task
+{
+        QueueHandle_t PWM_QueueHandle;  ///< Contains outgoing data of type PWM_t
+        TickType_t PWM_SendTimeout;     ///< Max xTicksToWait for xQueueReceive
+
+    public:
+        LEDTask(uint8_t priority) : scheduler_task("LED", 2048, priority),
+            PWM_QueueHandle(getSharedObject(PWM_QueueHandle_id)),   ///< PWM_QueueHandle
+            PWM_SendTimeout(0 * portTICK_PERIOD_MS)                 ///< 0ms
+        {
+
+        }
+
+        bool run(void *p)
+        {
+            vTaskSuspend(NULL);
             return true;
         }
 };
@@ -121,118 +148,147 @@ class visionTask : public scheduler_task
                 frame.coordx = ((((float)raw.coordx/(float)raw.framex)*(200))-(100));
                 frame.coordy = ((((float)raw.coordx/(float)raw.framex)*(200))-(100));
                 if (errQUEUE_FULL == xQueueSend(FRAME_QueueHandle, &frame, FRAME_SendTimeout))
-                    reportError(visionTask_xQueueSendTo_CV_Core);
+                    reportError(visionTask_xQueueSend_To_CV_Core);
             }
             else /* errQUEUE_Empty */ {
-                reportError(visionTask_xQueueReceiveFrom_roboLampHandler);
+                reportError(visionTask_xQueueReceive_From_roboLampHandler);
             }
             return true;
         }
 };
 
 /**
- * motorTask controls all PWM signals.
+ * PWMTask controls all PWM signals in degrees. (See PWM_t)
  */
-class motorTask : public scheduler_task
+class PWMTask : public scheduler_task
 {
-        PWM servo2[6];  ///< P2.0-P2.5
-        float min2[6];  ///< Min PWM Percentage
-        float max2[6];  ///< Max PWM Percentage
-        float deg2[6];  ///< Max Degree of Servo
-        enum pwmNum {
-            p2_0 = 0,   ///< Dustin
-            p2_1 = 1,   ///< James
-            p2_2 = 2,   ///< Brandon
-            p2_3 = 3,
-            p2_4 = 4,
-            p2_5 = 5,
-        };
         QueueHandle_t PWM_QueueHandle;  ///< Contains incoming data of type PWM_t in degrees
         TickType_t PWM_ReceiveTimeout;  ///< Max xTicksToWait for xQueueReceive
 
+        PWM PWM_Base;   ///< P2.0 Base Servo
+        float min2_0;   ///< Min PWM Percentage
+        float max2_0;   ///< Max PWM Percentage
+        float rot2_0;   ///< Max Degree of Servo
+
+        PWM PWM_Head;   ///< P2.1 Head Servo
+        float min2_1;   ///< Min PWM Percentage
+        float max2_1;   ///< Max PWM Percentage
+        float rot2_1;   ///< Max Degree of Servo
+
+        PWM PWM_LED;    ///< P2.5 Super LED
+        float min2_5;   ///< Min PWM Percentage
+        float max2_5;   ///< Max PWM Percentage
+
     public:
-        motorTask(uint8_t priority) : scheduler_task("motor", 2048, priority),
-            servo2{PWM(PWM::pwm1, 50),  ///< P2.0 Dustin
-                   PWM(PWM::pwm2, 50),  ///< P2.1 James
-                   PWM(PWM::pwm3, 50),  ///< P2.2 Brandon
-                   PWM(PWM::pwm4, 50),  ///< P2.3
-                   PWM(PWM::pwm5, 50),  ///< P2.4
-                   PWM(PWM::pwm6, 50)}, ///< P2.5
-            min2{2.5,   ///< P2.0 Dustin
-                 2.5,   ///< P2.1 James
-                 2.5,   ///< P2.2 Brandon
-                 5.0,   ///< P2.3
-                 5.0,   ///< P2.4
-                 5.0},  ///< P2.5
-            max2{12.5,  ///< P2.0 Dustin
-                 12.5,  ///< P2.1 James
-                 12.5,  ///< P2.2 Brandon
-                 10.0,  ///< P2.3
-                 10.0,  ///< P2.4
-                 10.0}, ///< P2.5
-            deg2{180,   ///< P2.0 Dustin
-                 180,   ///< P2.1 James
-                 180,   ///< P2.2 Brandon
-                 180,   ///< P2.3
-                 180,   ///< P2.4
-                 180},  ///< P2.5
+        PWMTask(uint8_t priority) : scheduler_task("PWM", 2048, priority),
             PWM_QueueHandle(getSharedObject(PWM_QueueHandle_id)),   ///< PWM_QueueHandle
-            PWM_ReceiveTimeout(1 * 1000 * portTICK_PERIOD_MS)       ///< 1 * 1000ms
+            PWM_ReceiveTimeout(1 * 1000 * portTICK_PERIOD_MS),      ///< 1 * 1000ms
+
+            PWM_Base(PWM(PWM::pwm1, 50)),   ///< P2.0 Base Servo
+            min2_0(2.5),                    ///< Min PWM Percentage
+            max2_0(12.5),                   ///< Max PWM Percentage
+            rot2_0(180),                    ///< Max Degree of Servo
+
+            PWM_Head(PWM(PWM::pwm2, 50)),   ///< P2.1 Head Servo
+            min2_1(2.5),                    ///< Min PWM Percentage
+            max2_1(12.5),                   ///< Max PWM Percentage
+            rot2_1(180),                    ///< Max Degree of Servo
+
+            PWM_LED(PWM(PWM::pwm6, 50)),    ///< P2.5 Super LED
+            min2_5(0),                      ///< Min PWM Percentage
+            max2_5(100)                     ///< Max PWM Percentage
         {
-            PWM_t init_degree;                                                  ///< Initial PWM state
-            xQueueReceive(PWM_QueueHandle, &init_degree, PWM_ReceiveTimeout);   ///< Get initial PWM state
-            set(p2_0, init_degree.p2_0);    ///< Set initial PWM state
-            set(p2_1, init_degree.p2_1);    ///< Set initial PWM state
-            set(p2_2, init_degree.p2_2);    ///< Set initial PWM state
-            set(p2_3, init_degree.p2_3);    ///< Set initial PWM state
-            set(p2_4, init_degree.p2_4);    ///< Set initial PWM state
-            set(p2_5, init_degree.p2_5);    ///< Set initial PWM state
+            /* Nothing to init */
         }
 
         /**
          * Sets the PWM based on the degree.
-         * If servo2[0]=50Hz, min2[0]=5.0, max2[0]=10.0, and deg2[0]=180, then you can use the following :
-         *      - Left    : set(p2_0, -90);     // -90 degrees = 5.0 % of 20ms = 1.0ms
-         *      - Neutral : set(p2_0,   0);     //   0 degrees = 7.5 % of 20ms = 1.5ms
-         *      - Right   : set(p2_0,  90);     //  90 degrees = 10  % of 20ms = 2.0ms
+         * If servo=50Hz, min=5.0, max=10.0, and rot=180, then you can use the following :
+         *      - Left    : degreeToPercent(-90, 5.0, 10.0, 180);   // -90 degrees = 5.0 % of 20ms = 1.0ms
+         *      - Neutral : degreeToPercent(  0, 5.0, 10.0, 180);   //   0 degrees = 7.5 % of 20ms = 1.5ms
+         *      - Right   : degreeToPercent( 90, 5.0, 10.0, 180);   //  90 degrees = 10  % of 20ms = 2.0ms
          *
          * You can use micro-steps to position the servo motor by using
-         * set(p2_0, 0.1), set(p2_0, 0.2) ... set(p2_0, 34.5) etc.
+         * degreeToPercent(0.1, 5.0, 10.0, 180), degreeToPercent(0.2, 5.0, 10.0, 180) ... degreeToPercent(34.5, 5.0, 10.0, 180) etc.
          */
-        bool set(pwmNum pinNum, float degree)
+        bool setDegree(PWM &pwm, float degree, float min, float max, float rot)
         {
-            if (degree < -deg2[pinNum]/2) {
-                servo2[pinNum].set(min2[pinNum]);
+            if (degree < -rot/2) {
+                pwm.set(min);
                 return false;
             }
-            else if (degree > deg2[pinNum]/2) {
-                servo2[pinNum].set(max2[pinNum]);
+            else if (degree > rot/2) {
+                pwm.set(max);
                 return false;
             }
             else {
-                return servo2[pinNum].set(((degree/(deg2[pinNum]/2))*((max2[pinNum]-min2[pinNum])/2))+((max2[pinNum]+min2[pinNum])/2));
+                return pwm.set( ((degree/(rot/2))*((max-min)/2)) + ((max+min)/2) );
+            }
+        }
+
+        /**
+         * Sets the PWM based on the percentage.
+         * If servo=50Hz, min=5.0, and max=10.0, then you can use the following :
+         *      - Left    : degreeToPercent(  0, 5.0, 10.0);    //   0 percent = 5.0 % of 20ms = 1.0ms
+         *      - Neutral : degreeToPercent( 50, 5.0, 10.0);    //  50 percent = 7.5 % of 20ms = 1.5ms
+         *      - Right   : degreeToPercent(100, 5.0, 10.0);    // 100 percent = 10  % of 20ms = 2.0ms
+         *
+         * You can use micro-steps to position the servo motor by using
+         * degreeToPercent(0.1, 5.0, 10.0), degreeToPercent(0.2, 5.0, 10.0) ... degreeToPercent(34.5, 5.0, 10.0) etc.
+         */
+        bool setPercent(PWM &pwm, float degree, float min, float max)
+        {
+            if (degree < 0) {
+                pwm.set(min);
+                return false;
+            }
+            else if (degree > 100) {
+                pwm.set(max);
+                return false;
+            }
+            else {
+                return pwm.set( ((degree/100)*(max-min)) + (min) );
             }
         }
 
         bool run(void *p)
         {
-            PWM_t degree;
-            if (pdTRUE == xQueueReceive(PWM_QueueHandle, &degree, PWM_ReceiveTimeout)) {
-                if (false == set(p2_0, degree.p2_0))
-                    reportError(motorTask_setDegreeExceedLimit_p2_0);
-                if (false == set(p2_1, degree.p2_1))
-                    reportError(motorTask_setDegreeExceedLimit_p2_1);
-                if (false == set(p2_2, degree.p2_2))
-                    reportError(motorTask_setDegreeExceedLimit_p2_2);
-                if (false == set(p2_3, degree.p2_3))
-                    reportError(motorTask_setDegreeExceedLimit_p2_3);
-                if (false == set(p2_4, degree.p2_4))
-                    reportError(motorTask_setDegreeExceedLimit_p2_4);
-                if (false == set(p2_5, degree.p2_5))
-                    reportError(motorTask_setDegreeExceedLimit_p2_5);
+            PWM_t signal;
+            if (pdTRUE == xQueueReceive(PWM_QueueHandle, &signal, PWM_ReceiveTimeout)) {
+                switch (signal.type) {
+                    case pwmDegree:
+                        switch (signal.pin) {
+                            case p2_0:
+                                if (false == setDegree(PWM_Base, signal.value, min2_0, max2_0, rot2_0))
+                                    reportError(PWMTask_setDegree_ExceedLimit_p2_0);
+                                break;
+                            case p2_1:
+                                if (false == setDegree(PWM_Head, signal.value, min2_1, max2_1, rot2_1))
+                                    reportError(PWMTask_setDegree_ExceedLimit_p2_1);
+                                break;
+                            default:
+                                reportError(PWMTask_setDegree_UndefinedPin);
+                                break;
+                        }
+                        break;
+                    case pwmPercent:
+                        switch (signal.pin) {
+                            case p2_5:
+                                if (false == setPercent(PWM_LED, signal.value, min2_5, max2_5))
+                                    reportError(PWMTask_setPercent_ExceedLimit_p2_5);
+                                break;
+                            default:
+                                reportError(PWMTask_setPercent_UndefinedPin);
+                                break;
+                        }
+                        break;
+                    default:
+                        reportError(PWMTask_UndefinedType);
+                        break;
+                }
             }
             else /* errQUEUE_EMPTY */ {
-                reportError(motorTask_xQueueReceiveFrom_CV_Core);
+                reportError(PWMTask_xQueueReceiveFrom_CV_Core);
             }
             return true;
         }
@@ -251,7 +307,7 @@ class errorTask : public scheduler_task
         errorTask(uint8_t priority) : scheduler_task("error", 2048, priority),
             ERR_QueueHandle(getSharedObject(ERR_QueueHandle_id)),   ///< ERR_QueueHandle
             ERR_ReadTimeout(portMAX_DELAY),                         ///< (2^32)-1 ticks
-            ERR_DisplayDuration(10 * 1000 * portTICK_PERIOD_MS)     ///< 10 * 1000ms
+            ERR_DisplayDuration(1 * 1000 * portTICK_PERIOD_MS)      ///< 1 * 1000ms
         {
             LD.clear();     ///< Begin with blank LED Display
         }
@@ -274,43 +330,54 @@ class errorTask : public scheduler_task
                     case roboLampHandler_cmdParams_scanf:
                         LED_Display("HI");
                         break;
-                    case roboLampHandler_xQueueSendTo_visionTask:
+                    case roboLampHandler_xQueueSend_To_visionTask:
                         LED_Display("HO");
                         break;
-                    case visionTask_xQueueReceiveFrom_roboLampHandler:
+                    case visionTask_xQueueReceive_From_roboLampHandler:
                         LED_Display("VI");
                         break;
-                    case visionTask_xQueueSendTo_CV_Core:
+                    case visionTask_xQueueSend_To_CV_Core:
                         LED_Display("VO");
                         break;
-                    case CV_Core_xQueueReceiveFrom_visionTask:
+                    case CV_Core_xQueueReceive_From_visionTask:
                         LED_Display("CI");
                         break;
-                    case CV_Core_xQueueSendTo_motorTask:
+                    case CV_Core_xQueueSend_To_motorTask:
                         LED_Display("CO");
                         break;
-                    case motorTask_xQueueReceiveFrom_CV_Core:
+                    case PWMTask_xQueueReceiveFrom_CV_Core:
                         LED_Display("MI");
                         break;
-                    case motorTask_setDegreeExceedLimit_p2_0:
+                    case PWMTask_setDegree_ExceedLimit_p2_0:
+                    case PWMTask_setPercent_ExceedLimit_p2_0:
                         LED_Display("P0");
                         break;
-                    case motorTask_setDegreeExceedLimit_p2_1:
+                    case PWMTask_setDegree_ExceedLimit_p2_1:
+                    case PWMTask_setPercent_ExceedLimit_p2_1:
                         LED_Display("P1");
                         break;
-                    case motorTask_setDegreeExceedLimit_p2_2:
+                    case PWMTask_setDegree_ExceedLimit_p2_2:
+                    case PWMTask_setPercent_ExceedLimit_p2_2:
                         LED_Display("P2");
                         break;
-                    case motorTask_setDegreeExceedLimit_p2_3:
+                    case PWMTask_setDegree_ExceedLimit_p2_3:
+                    case PWMTask_setPercent_ExceedLimit_p2_3:
                         LED_Display("P3");
                         break;
-                    case motorTask_setDegreeExceedLimit_p2_4:
+                    case PWMTask_setDegree_ExceedLimit_p2_4:
+                    case PWMTask_setPercent_ExceedLimit_p2_4:
                         LED_Display("P4");
                         break;
-                    case motorTask_setDegreeExceedLimit_p2_5:
+                    case PWMTask_setDegree_ExceedLimit_p2_5:
+                    case PWMTask_setPercent_ExceedLimit_p2_5:
                         LED_Display("P5");
                         break;
-                    case errorTask_xQueueReceiveFrom_generic:
+                    case PWMTask_setDegree_UndefinedPin:
+                    case PWMTask_setPercent_UndefinedPin:
+                    case PWMTask_UndefinedType:
+                        LED_Display("PU");
+                        break;
+                    case errorTask_xQueueReceive_From_generic:
                         LED_Display("EI");
                         break;
                     default:
@@ -322,7 +389,7 @@ class errorTask : public scheduler_task
                 LD.clear();
             }
             else {
-                reportError(errorTask_xQueueReceiveFrom_generic);
+                reportError(errorTask_xQueueReceive_From_generic);
             }
             return true;
         }
@@ -345,8 +412,9 @@ class errorTask : public scheduler_task
 int main(void)
 {
     scheduler_add_task(new CV_Core(PRIORITY_LOW));
+    scheduler_add_task(new LEDTask(PRIORITY_LOW));
     scheduler_add_task(new visionTask(PRIORITY_MEDIUM));
-    scheduler_add_task(new motorTask(PRIORITY_MEDIUM));
+    scheduler_add_task(new PWMTask(PRIORITY_MEDIUM));
     scheduler_add_task(new errorTask(PRIORITY_MEDIUM));
 
     /**

@@ -60,6 +60,7 @@ class CV_Core : public scheduler_task
 
         bool run(void *p)
         {
+
             PWM_t PWM_BaseDegree = {p2_0,       ///< Pin 2.0 (Base Servo)
                                     pwmDegree,  ///< Value type is in degrees
                                     0};         ///< Initial value
@@ -71,23 +72,34 @@ class CV_Core : public scheduler_task
 
             for (;;)
             {
-                FRAME_t frame;
-                if (pdTRUE == xQueueReceive(FRAME_QueueHandle, &frame, FRAME_ReceiveTimeout)) {
+                #define RANGE 10
+                #define MIN 2.5
+                #define STEP .2
+                FRAME_t next_frame;//ideal next position of motor, in x & y
+                float current_posx, current_posy; //current position of motor, in %
+                float next_posx, next_posy; //next position of motor, in %
+                if (pdTRUE == xQueueReceive(FRAME_QueueHandle, &next_frame, FRAME_ReceiveTimeout))
+                {
 
-                    // Todo: Logic & Limits <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-                    PWM_BaseDegree.value -= frame.coordx / 100;  ///< Base Servo (Inverted Directionality)
-                    PWM_HeadDegree.value += frame.coordy / 100;  ///< Camera Servo (Todo: Undefined Directionality)
-                    if (PWM_BaseDegree.value > 90)
-                        PWM_BaseDegree.value = 90;
-                    if (PWM_BaseDegree.value <-90)
-                        PWM_BaseDegree.value =-90;
-                    if (PWM_HeadDegree.value > 90)
-                        PWM_HeadDegree.value = 90;
-                    if (PWM_HeadDegree.value <-90)
-                        PWM_HeadDegree.value =-90;
+                    // Todo: Logic & Limits Frame to pos = (frame % * (12.5-2.5)) + 2.5
+                    next_posx = ((next_frame.coordx * RANGE) + MIN);   ///< Base Servo
+                    next_posy = ((next_frame.coordy * RANGE) + MIN);   ///< Camera Servo
 
-                    if (errQUEUE_FULL == xQueueSend(PWM_QueueHandle, &PWM_BaseDegree, PWM_SendTimeout))
-                        reportError(CV_Core_xQueueSend_To_motorTask);
+                    if(next_posx > current_posx )
+                    {
+                        current_posx = current_posx + STEP;
+                    }
+                    else if (next_posx < current_posx)
+                    {
+                        current_posx = current_posx - STEP;
+                    }
+                    else
+                    {
+                        //stay in same position
+                    }
+
+                    current_posy = current_posy +.2;
+
                     if (errQUEUE_FULL == xQueueSend(PWM_QueueHandle, &PWM_HeadDegree, PWM_SendTimeout))
                         reportError(CV_Core_xQueueSend_To_motorTask);
                 }
@@ -296,6 +308,74 @@ class PWMTask : public scheduler_task
         }
 };
 
+//For verification only, delete from final project
+//PWM_t degreet;
+//
+//class resetPositionTask : public scheduler_task
+//{
+//    public:
+//        resetPositionTask(uint8_t priority) : scheduler_task("resetP", 2048, priority)
+//    {
+//            //Init
+//    }
+//
+//
+//        bool run(void *p)
+//        {
+//            PWM servo0(PWM::pwm1, 50);
+//            PWM servo1(PWM::pwm2, 50);
+//            float max = 12.5, min = 2.5, mid = 7.4;
+//
+//            if(SW.getSwitch(4))
+//            {
+//                if(SW.getSwitch(1))
+//                {
+//                    if(degreet.p2_0 <= max)
+//                    degreet.p2_0 += .2;
+//                }
+//                else if(SW.getSwitch(2))
+//                {
+//                    degreet.p2_0 = mid;
+//                }
+//                else if(SW.getSwitch(3))
+//                {
+//                    if(degreet.p2_0 >= min)
+//                    degreet.p2_0 -= .2;
+//                }
+//                else
+//                {
+//                    //idle
+//                }
+//            }
+//            else
+//            {
+//                if(SW.getSwitch(1))
+//                {
+//                    if(degreet.p2_1 <= max) degreet.p2_1 += .2;
+//                }
+//                else if(SW.getSwitch(2))
+//                {
+//                    degreet.p2_1 = mid;
+//                }
+//                else if(SW.getSwitch(3))
+//                {
+//                    if(degreet.p2_1 >= min) degreet.p2_1 -= .2;
+//                }
+//                else
+//                {
+//                    //idle
+//                }
+//
+//            }
+//
+//            servo0.set(degreet.p2_0);
+//            servo1.set(degreet.p2_1);
+//            vTaskDelay(50);
+//
+//            return true;
+//        }
+//
+//};
 /**
  * errorTask controls all error signals.
  */
@@ -342,6 +422,7 @@ class errorTask : public scheduler_task
                         LED_Display("VO");
                         break;
                     case CV_Core_xQueueReceive_From_visionTask:
+
                         LED_Display("CI");
                         break;
                     case CV_Core_xQueueSend_To_motorTask:
@@ -418,6 +499,7 @@ int main(void)
     scheduler_add_task(new visionTask(PRIORITY_MEDIUM));
     scheduler_add_task(new PWMTask(PRIORITY_MEDIUM));
     scheduler_add_task(new errorTask(PRIORITY_MEDIUM));
+//    scheduler_add_task(new resetPositionTask(PRIORITY_MEDIUM));
 
     /**
      * A few basic tasks for this bare-bone system :

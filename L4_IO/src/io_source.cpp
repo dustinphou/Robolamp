@@ -23,7 +23,6 @@
 #include "adc0.h"
 
 
-
 /**
  * The following diagram shows bit number corresponding to the LED
  * Change "#if 0" to "#if 1" to use Default Character Map.

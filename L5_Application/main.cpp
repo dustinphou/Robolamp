@@ -76,20 +76,22 @@ class CV_Core : public scheduler_task
                 #define MIN 2.5
                 #define STEP .2
                 FRAME_t next_frame;//ideal next position of motor, in x & y
-                float current_posx, current_posy; //current position of motor, in %
-                float next_posx, next_posy; //next position of motor, in %
+                float current_posx = 7.5, current_posy = 7.5; //current position of motor, in %
+                float next_posx, next_posy, diffx, diffy; //next position of motor, in %
                 if (pdTRUE == xQueueReceive(FRAME_QueueHandle, &next_frame, FRAME_ReceiveTimeout))
                 {
 
                     // Todo: Logic & Limits Frame to pos = (frame % * (12.5-2.5)) + 2.5
                     next_posx = ((next_frame.coordx * RANGE) + MIN);   ///< Base Servo
                     next_posy = ((next_frame.coordy * RANGE) + MIN);   ///< Camera Servo
+                    diffx = abs(next_posx - current_posx);
+                    diffy = abs(next_posy - current_posy);
 
-                    if(next_posx > current_posx )
+                    if(next_posx > current_posx && diffx > .1)
                     {
                         current_posx = current_posx + STEP;
                     }
-                    else if (next_posx < current_posx)
+                    else if (next_posx < current_posx && diffx > .1)
                     {
                         current_posx = current_posx - STEP;
                     }
@@ -98,7 +100,21 @@ class CV_Core : public scheduler_task
                         //stay in same position
                     }
 
-                    current_posy = current_posy +.2;
+                    if(next_posy > current_posy && diffy > .1)
+                    {
+                        current_posy = current_posy + STEP;
+                    }
+                    else if (next_posy < current_posy && diffy > .1)
+                    {
+                        current_posy = current_posy - STEP;
+                    }
+                    else
+                    {
+                        //stay in same position
+                    }
+
+                    PWM_BaseDegree.value = current_posx;
+                    PWM_HeadDegree.value = current_posy;
 
                     if (errQUEUE_FULL == xQueueSend(PWM_QueueHandle, &PWM_HeadDegree, PWM_SendTimeout))
                         reportError(CV_Core_xQueueSend_To_motorTask);

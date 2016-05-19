@@ -242,7 +242,7 @@ class PWMTask : public scheduler_task
             rot2_1(180),                    ///< Max Degree of Servo
 
             PWM_LED(PWM(PWM::pwm6, 1024)),  ///< P2.5 Super LED
-            min2_5(0),                      ///< Min PWM Percentage
+            min2_5(10),                     ///< Min PWM Percentage
             max2_5(100)                     ///< Max PWM Percentage
         {
             /* Nothing to init */

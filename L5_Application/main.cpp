@@ -70,27 +70,26 @@ class CV_Core : public scheduler_task
             PWM_t PWM_BasePercentage = {p2_0,       ///< Pin 2.0 (Base Servo)
                                     pwmDegree,  ///< Value type is in degrees
                                     0};         ///< Initial value
-            PWM_t PWM_Percentage = {p2_1,       ///< Pin 2.1 (Base Servo)
+            PWM_t PWM_HeadPercentage = {p2_1,       ///< Pin 2.1 (Head Servo)
                                     pwmDegree,  ///< Value type is in degrees
                                     0};         ///< Initial value
             xQueueSend(PWM_QueueHandle, &PWM_BasePercentage, PWM_SendTimeout);  ///< Send initial PWM_t
-            xQueueSend(PWM_QueueHandle, &PWM_Percentage, PWM_SendTimeout);  ///< Send initial PWM_t
+            xQueueSend(PWM_QueueHandle, &PWM_HeadPercentage, PWM_SendTimeout);  ///< Send initial PWM_t
 
             for (;;)
             {
-                #define RANGE 10
-                #define MIN 2.5
-                #define STEP .2
-                FRAME_t next_frame;//ideal next position of motor, in x & y
-                float current_posx = 7.5, current_posy = 7.5; //current position of motor, in %
+                #define MAX_DEGREE 90
+                #define STEP 2
+                FRAME_t next_frame_percentage;//ideal next position of motor, in x & y
+                float current_posx = MAX_DEGREE/2, current_posy = MAX_DEGREE/2; //current position of motor, in %
                 float next_posx, next_posy, diffx, diffy; //next position of motor, in %
-                if (pdTRUE == xQueueReceive(FRAME_QueueHandle, &next_frame, FRAME_ReceiveTimeout))
+                if (pdTRUE == xQueueReceive(FRAME_QueueHandle, &next_frame_percentage, FRAME_ReceiveTimeout))
                 {
 
                     // Todo: Logic & Limits Frame to pos = (frame % * (12.5-2.5)) + 2.5
-                    PWM_BasePercentage.value = ((next_frame.coordx * RANGE) + MIN);   ///< Base Servo
-                    next_posy = ((next_frame.coordy * RANGE) + MIN);   ///< Camera Servo
-                    diffx = abs(PWM_BasePercentage.value - current_posx);
+                    next_posx = next_frame_percentage.coordx * MAX_DEGREE;   ///< Base Servo
+                    next_posy = next_frame_percentage.coordy * MAX_DEGREE;   ///< Camera Servo
+                    diffx = abs(next_posx - current_posx);
                     diffy = abs(next_posy - current_posy);
 
                     if(next_posx > current_posx && diffx > .1)
@@ -120,9 +119,10 @@ class CV_Core : public scheduler_task
                     }
 
                     PWM_BasePercentage.value = current_posx;
-                    PWM_Percentage.value = current_posy;
+                    PWM_HeadPercentage.value = current_posy;
+                    vTaskDelay(1/2);
 
-                    if (errQUEUE_FULL == xQueueSend(PWM_QueueHandle, &PWM_Percentage, PWM_SendTimeout))
+                    if (errQUEUE_FULL == xQueueSend(PWM_QueueHandle, &PWM_HeadPercentage, PWM_SendTimeout))
                         reportError(CV_Core_xQueueSend_To_motorTask);
                 }
                 else /* errQUEUE_Empty */ {
@@ -194,7 +194,6 @@ class visionTask : public scheduler_task
             if (pdTRUE == xQueueReceive(CV_QueueHandle, &raw, CV_ReceiveTimeout)) {
                 frame.coordx = ((((float)raw.coordx/(float)raw.framex)*(200))-(100));
                 frame.coordy = ((((float)raw.coordx/(float)raw.framex)*(200))-(100));
-                printf("%0.01f x %0.01f", frame.coordx, frame.coordy);
                 if (errQUEUE_FULL == xQueueSend(FRAME_QueueHandle, &frame, FRAME_SendTimeout))
                     reportError(visionTask_xQueueSend_To_CV_Core);
             }

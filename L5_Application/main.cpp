@@ -49,6 +49,9 @@ class CV_Core : public scheduler_task
         TickType_t FRAME_ReceiveTimeout;    ///< Max xTicksToWait for xQueueReceive
         TickType_t PWM_SendTimeout;         ///< Max xTicksToWait for xQueueSend
 
+        PWM_t PWM_BasePercentage;           ///< PWM_t to xQueueSend to Pin 2.0 (Base Servo)
+        PWM_t PWM_HeadPercentage;           ///< PWM_t to xQueueSend to Pin 2.1 (Head Servo)
+
     public:
         CV_Core(uint8_t priority) : scheduler_task("core", 2048, priority),
             CV_QueueHandle(xQueueCreate(1, sizeof(CV_t))),          ///< CV_QueueHandle
@@ -64,72 +67,72 @@ class CV_Core : public scheduler_task
             addSharedObject(ERR_QueueHandle_id, ERR_QueueHandle);       ///< Shares ERR_QueueHandle
         }
 
-        bool run(void *p)
+        bool taskEntry(void)
         {
+            PWM_BasePercentage = {p2_0, pwmDegree, 0};  ///< Pin 2.0 (Base Servo), Value type is in degrees, Initial value
+            PWM_HeadPercentage = {p2_1, pwmDegree, 0};  ///< Pin 2.1 (Head Servo), Value type is in degrees, Initial value
 
-            PWM_t PWM_BasePercentage = {p2_0,       ///< Pin 2.0 (Base Servo)
-                                    pwmDegree,  ///< Value type is in degrees
-                                    0};         ///< Initial value
-            PWM_t PWM_HeadPercentage = {p2_1,       ///< Pin 2.1 (Head Servo)
-                                    pwmDegree,  ///< Value type is in degrees
-                                    0};         ///< Initial value
             xQueueSend(PWM_QueueHandle, &PWM_BasePercentage, PWM_SendTimeout);  ///< Send initial PWM_t
             xQueueSend(PWM_QueueHandle, &PWM_HeadPercentage, PWM_SendTimeout);  ///< Send initial PWM_t
 
-            for (;;)
+            return true;
+        }
+
+        bool run(void *p)
+        {
+            #define MAX_DEGREE 90
+            #define STEP 2
+            FRAME_t next_frame_percentage;//ideal next position of motor, in x & y
+            float current_posx = MAX_DEGREE/2, current_posy = MAX_DEGREE/2; //current position of motor, in %
+            float next_posx, next_posy, diffx, diffy; //next position of motor, in %
+            if (pdTRUE == xQueueReceive(FRAME_QueueHandle, &next_frame_percentage, FRAME_ReceiveTimeout))
             {
-                #define MAX_DEGREE 90
-                #define STEP 2
-                FRAME_t next_frame_percentage;//ideal next position of motor, in x & y
-                float current_posx = MAX_DEGREE/2, current_posy = MAX_DEGREE/2; //current position of motor, in %
-                float next_posx, next_posy, diffx, diffy; //next position of motor, in %
-                if (pdTRUE == xQueueReceive(FRAME_QueueHandle, &next_frame_percentage, FRAME_ReceiveTimeout))
+
+                // Todo: Logic & Limits Frame to pos = (frame % * (12.5-2.5)) + 2.5
+                next_posx = next_frame_percentage.coordx * MAX_DEGREE;   ///< Base Servo
+                next_posy = next_frame_percentage.coordy * MAX_DEGREE;   ///< Camera Servo
+                diffx = abs(next_posx - current_posx);
+                diffy = abs(next_posy - current_posy);
+
+                if(next_posx > current_posx && diffx > .1)
                 {
-
-                    // Todo: Logic & Limits Frame to pos = (frame % * (12.5-2.5)) + 2.5
-                    next_posx = next_frame_percentage.coordx * MAX_DEGREE;   ///< Base Servo
-                    next_posy = next_frame_percentage.coordy * MAX_DEGREE;   ///< Camera Servo
-                    diffx = abs(next_posx - current_posx);
-                    diffy = abs(next_posy - current_posy);
-
-                    if(next_posx > current_posx && diffx > .1)
-                    {
-                        current_posx = current_posx + STEP;
-                    }
-                    else if (next_posx < current_posx && diffx > .1)
-                    {
-                        current_posx = current_posx - STEP;
-                    }
-                    else
-                    {
-                        //stay in same position
-                    }
-
-                    if(next_posy > current_posy && diffy > .1)
-                    {
-                        current_posy = current_posy + STEP;
-                    }
-                    else if (next_posy < current_posy && diffy > .1)
-                    {
-                        current_posy = current_posy - STEP;
-                    }
-                    else
-                    {
-                        //stay in same position
-                    }
-
-                    PWM_BasePercentage.value = current_posx;
-                    PWM_HeadPercentage.value = current_posy;
-                    vTaskDelay(1/2);
-
-                    if (errQUEUE_FULL == xQueueSend(PWM_QueueHandle, &PWM_HeadPercentage, PWM_SendTimeout))
-                        reportError(CV_Core_xQueueSend_To_motorTask);
+                    current_posx = current_posx + STEP;
                 }
-                else /* errQUEUE_Empty */ {
-                    reportError(CV_Core_xQueueReceive_From_visionTask);
+                else if (next_posx < current_posx && diffx > .1)
+                {
+                    current_posx = current_posx - STEP;
                 }
+                else
+                {
+                    //stay in same position
+                }
+
+                if(next_posy > current_posy && diffy > .1)
+                {
+                    current_posy = current_posy + STEP;
+                }
+                else if (next_posy < current_posy && diffy > .1)
+                {
+                    current_posy = current_posy - STEP;
+                }
+                else
+                {
+                    //stay in same position
+                }
+
+                PWM_BasePercentage.value = current_posx;
+                PWM_HeadPercentage.value = current_posy;
+                vTaskDelay(1/2);
+
+                if (errQUEUE_FULL == xQueueSend(PWM_QueueHandle, &PWM_BasePercentage, PWM_SendTimeout))
+                    reportError(CV_Core_xQueueSend_To_motorTask);
+                if (errQUEUE_FULL == xQueueSend(PWM_QueueHandle, &PWM_HeadPercentage, PWM_SendTimeout))
+                    reportError(CV_Core_xQueueSend_To_motorTask);
             }
-            return true;    // CV_Core should never return
+            else /* errQUEUE_Empty */ {
+                reportError(CV_Core_xQueueReceive_From_visionTask);
+            }
+            return true;
         }
 };
 

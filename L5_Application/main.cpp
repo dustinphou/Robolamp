@@ -23,12 +23,19 @@
  * 			@see L0_LowLevel/lpc_sys.h if you wish to override printf/scanf functions.
  *
  */
+
+/* RTOS Libraries */
 #include "tasks.hpp"
 #include "examples/examples.hpp"
 
+/* Standard Template Libraries */
+#include "stdio.h"
+
+/* LPC Libraries */
 #include "io.hpp"
 #include "lpc_pwm.hpp"
 
+/* Custom Libraries */
 #include "cvtypes.hpp"  ///< Contains all structures and enumerations used by CV_Core
 
 /**
@@ -145,6 +152,9 @@ class LEDTask : public scheduler_task
 
         bool run(void *p)
         {
+            LS.getPercentValue();
+//            if (errQUEUE_FULL == xQueueSend(PWM_QueueHandle, &PWM_LEDPercentage, PWM_SendTimeout))
+//                reportError(CV_Core_xQueueSend_To_motorTask);
             vTaskSuspend(NULL);
             return true;
         }
@@ -426,6 +436,7 @@ class errorTask : public scheduler_task
         {
             LD.setLeftDigit(value[0]);
             LD.setRightDigit(value[1]);
+            printf("%.2s\n", value);
         }
 
         bool run(void *p)

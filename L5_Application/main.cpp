@@ -29,7 +29,6 @@
 #include "examples/examples.hpp"
 
 /* Standard Template Libraries */
-#include "stdio.h"
 
 /* LPC Libraries */
 #include "io.hpp"
@@ -139,23 +138,31 @@ class CV_Core : public scheduler_task
  */
 class LEDTask : public scheduler_task
 {
-        QueueHandle_t PWM_QueueHandle;  ///< Contains outgoing data of type PWM_t
-        TickType_t PWM_SendTimeout;     ///< Max xTicksToWait for xQueueReceive
+        QueueHandle_t PWM_QueueHandle;      ///< Contains outgoing data of type PWM_t
+        TickType_t PWM_SendTimeout;         ///< Max xTicksToWait for xQueueReceive
+        PWM_t PWM_LEDPercentage;            ///< PWM_t to xQueueSend
+        uint32_t LED_UpdateFrequencyInHz;   ///< Frequency at which to Update PWM_LEDPercentage in Hertz
+        float LED_UpdateStepInPercentage;   ///< Percentage of light to add to PWM_LEDPercentage per Update [Value is between 0 and 1]
 
     public:
         LEDTask(uint8_t priority) : scheduler_task("LED", 2048, priority),
             PWM_QueueHandle(getSharedObject(PWM_QueueHandle_id)),   ///< PWM_QueueHandle
-            PWM_SendTimeout(0 * portTICK_PERIOD_MS)                 ///< 0ms
+            PWM_SendTimeout(0 * portTICK_PERIOD_MS),                ///< 0ms
+            PWM_LEDPercentage{p2_5,         ///< Pin 2.5 (Super LED)
+                              pwmPercent,   ///< Value type is in percentages
+                              0},           ///< Initial value
+        LED_UpdateFrequencyInHz(60),        ///< Update Frequency
+        LED_UpdateStepInPercentage(0.01)    ///< Update Step
         {
-
+            /* Nothing to init */
         }
 
         bool run(void *p)
         {
-            LS.getPercentValue();
-//            if (errQUEUE_FULL == xQueueSend(PWM_QueueHandle, &PWM_LEDPercentage, PWM_SendTimeout))
-//                reportError(CV_Core_xQueueSend_To_motorTask);
-            vTaskSuspend(NULL);
+            PWM_LEDPercentage.value += (LED_UpdateStepInPercentage * (LS.getPercentValue() - PWM_LEDPercentage.value));
+            if (errQUEUE_FULL == xQueueSend(PWM_QueueHandle, &PWM_LEDPercentage, PWM_SendTimeout))
+                reportError(LEDTask_xQueueSend_To_motorTask);
+            vTaskDelay((1 / (float)LED_UpdateFrequencyInHz) * 1000 * portTICK_PERIOD_MS);
             return true;
         }
 };
@@ -234,7 +241,7 @@ class PWMTask : public scheduler_task
             max2_1(12.5),                   ///< Max PWM Percentage
             rot2_1(180),                    ///< Max Degree of Servo
 
-            PWM_LED(PWM(PWM::pwm6, 50)),    ///< P2.5 Super LED
+            PWM_LED(PWM(PWM::pwm6, 1024)),  ///< P2.5 Super LED
             min2_5(0),                      ///< Min PWM Percentage
             max2_5(100)                     ///< Max PWM Percentage
         {
@@ -436,7 +443,6 @@ class errorTask : public scheduler_task
         {
             LD.setLeftDigit(value[0]);
             LD.setRightDigit(value[1]);
-            printf("%.2s\n", value);
         }
 
         bool run(void *p)
@@ -457,11 +463,13 @@ class errorTask : public scheduler_task
                         LED_Display("VO");
                         break;
                     case CV_Core_xQueueReceive_From_visionTask:
-
                         LED_Display("CI");
                         break;
                     case CV_Core_xQueueSend_To_motorTask:
                         LED_Display("CO");
+                        break;
+                    case LEDTask_xQueueSend_To_motorTask:
+                        LED_Display("LO");
                         break;
                     case PWMTask_xQueueReceiveFrom_CV_Core:
                         LED_Display("MI");

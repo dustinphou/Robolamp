@@ -197,7 +197,7 @@ class visionTask : public scheduler_task
         QueueHandle_t FRAME_QueueHandle;    ///< Contains outgoing data of type FRAME_t to CV_Core
         TickType_t CV_ReceiveTimeout;       ///< Max xTicksToWait for xQueueReceive
         TickType_t FRAME_SendTimeout;       ///< Max xTicksToWait for xQueueSend
-
+        FILE *fp;
     public:
         visionTask(uint8_t priority) : scheduler_task("vision", 2048, priority),
             CV_QueueHandle(getSharedObject(CV_QueueHandle_id)),         ///< CV_QueueHandle
@@ -215,6 +215,9 @@ class visionTask : public scheduler_task
             if (pdTRUE == xQueueReceive(CV_QueueHandle, &raw, CV_ReceiveTimeout)) {
                 frame.coordx = ((((float)raw.coordx/(float)raw.framex)*(200))-(100));
                 frame.coordy = ((((float)raw.coordx/(float)raw.framex)*(200))-(100));
+                fp = fopen("0:pixel.txt", "a");
+                fprintf(fp, "%f0.01x%f0.01\n", frame.coordx, frame.coordy);
+                fclose(fp);
                 if (errQUEUE_FULL == xQueueSend(FRAME_QueueHandle, &frame, FRAME_SendTimeout))
                     reportError(visionTask_xQueueSend_To_CV_Core);
             }

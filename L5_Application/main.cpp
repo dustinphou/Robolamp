@@ -303,6 +303,14 @@ class PWMTask : public scheduler_task
                         break;
                     case pwmPercent:
                         switch (signal.pin) {
+                            case p2_0:
+                                if (false == setPercent(PWM_Base, signal.value, min2_0, max2_0))
+                                    reportError(PWMTask_setDegree_ExceedLimit_p2_0);
+                                break;
+                            case p2_1:
+                                if (false == setPercent(PWM_Head, signal.value, min2_1, max2_1))
+                                    reportError(PWMTask_setDegree_ExceedLimit_p2_1);
+                                break;
                             case p2_5:
                                 if (false == setPercent(PWM_LED, signal.value, min2_5, max2_5))
                                     reportError(PWMTask_setPercent_ExceedLimit_p2_5);

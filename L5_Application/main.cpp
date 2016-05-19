@@ -59,7 +59,10 @@ class CV_Core : public scheduler_task
             PWM_QueueHandle(xQueueCreate(1, sizeof(PWM_t))),        ///< PWM_QueueHandle
             ERR_QueueHandle(xQueueCreate(1, sizeof(ERR_id))),       ///< ERR_QueueHandle
             FRAME_ReceiveTimeout(1 * 1000 * portTICK_PERIOD_MS),    ///< 1 * 1000ms
-            PWM_SendTimeout(0 * portTICK_PERIOD_MS)                 ///< 0ms
+            PWM_SendTimeout(0 * portTICK_PERIOD_MS),                ///< 0ms
+
+            PWM_BaseDegree{p2_0, pwmDegree, 0},                     ///< Pin 2.0 (Base Servo), Value type is in degrees, Initial value
+            PWM_HeadDegree{p2_1, pwmDegree, 0}                      ///< Pin 2.1 (Head Servo), Value type is in degrees, Initial value
         {
             addSharedObject(CV_QueueHandle_id, CV_QueueHandle);         ///< Shares CV_QueueHandle
             addSharedObject(FRAME_QueueHandle_id, FRAME_QueueHandle);   ///< Shares FRAME_QueueHandle
@@ -69,9 +72,6 @@ class CV_Core : public scheduler_task
 
         bool taskEntry(void)
         {
-            PWM_BaseDegree = {p2_0, pwmDegree, 0};  ///< Pin 2.0 (Base Servo), Value type is in degrees, Initial value
-            PWM_HeadDegree = {p2_1, pwmDegree, 0};  ///< Pin 2.1 (Head Servo), Value type is in degrees, Initial value
-
             xQueueSend(PWM_QueueHandle, &PWM_BaseDegree, PWM_SendTimeout);  ///< Send initial PWM_t
             xQueueSend(PWM_QueueHandle, &PWM_HeadDegree, PWM_SendTimeout);  ///< Send initial PWM_t
 
@@ -145,7 +145,9 @@ class LEDTask : public scheduler_task
 {
         QueueHandle_t PWM_QueueHandle;      ///< Contains outgoing data of type PWM_t
         TickType_t PWM_SendTimeout;         ///< Max xTicksToWait for xQueueReceive
+
         PWM_t PWM_LEDPercentage;            ///< PWM_t to xQueueSend
+
         uint32_t LED_UpdateFrequencyInHz;   ///< Frequency at which to Update PWM_LEDPercentage in Hertz
         float LED_UpdateStepInPercentage;   ///< Percentage of light to add to PWM_LEDPercentage per Update [Value is between 0 and 1]
 
@@ -153,11 +155,11 @@ class LEDTask : public scheduler_task
         LEDTask(uint8_t priority) : scheduler_task("LED", 2048, priority),
             PWM_QueueHandle(getSharedObject(PWM_QueueHandle_id)),   ///< PWM_QueueHandle
             PWM_SendTimeout(0 * portTICK_PERIOD_MS),                ///< 0ms
-            PWM_LEDPercentage{p2_5,         ///< Pin 2.5 (Super LED)
-                              pwmPercent,   ///< Value type is in percentages
-                              0},           ///< Initial value
-        LED_UpdateFrequencyInHz(60),        ///< Update Frequency
-        LED_UpdateStepInPercentage(0.01)    ///< Update Step
+
+            PWM_LEDPercentage{p2_5, pwmPercent, 10},                ///< Pin 2.5 (Super LED), Value type is in percentages, Initial value
+
+            LED_UpdateFrequencyInHz(60),        ///< Update Frequency
+            LED_UpdateStepInPercentage(0.01)    ///< Update Step
         {
             /* Nothing to init */
         }
@@ -247,7 +249,7 @@ class PWMTask : public scheduler_task
             rot2_1(180),                    ///< Max Degree of Servo
 
             PWM_LED(PWM(PWM::pwm6, 1024)),  ///< P2.5 Super LED
-            min2_5(10),                     ///< Min PWM Percentage
+            min2_5(0),                      ///< Min PWM Percentage
             max2_5(100)                     ///< Max PWM Percentage
         {
             /* Nothing to init */

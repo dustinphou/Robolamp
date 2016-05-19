@@ -70,11 +70,11 @@ class CV_Core : public scheduler_task
             PWM_t PWM_BasePercentage = {p2_0,       ///< Pin 2.0 (Base Servo)
                                     pwmDegree,  ///< Value type is in degrees
                                     0};         ///< Initial value
-            PWM_t PWM_HeadDegree = {p2_1,       ///< Pin 2.1 (Base Servo)
+            PWM_t PWM_Percentage = {p2_1,       ///< Pin 2.1 (Base Servo)
                                     pwmDegree,  ///< Value type is in degrees
                                     0};         ///< Initial value
             xQueueSend(PWM_QueueHandle, &PWM_BasePercentage, PWM_SendTimeout);  ///< Send initial PWM_t
-            xQueueSend(PWM_QueueHandle, &PWM_HeadDegree, PWM_SendTimeout);  ///< Send initial PWM_t
+            xQueueSend(PWM_QueueHandle, &PWM_Percentage, PWM_SendTimeout);  ///< Send initial PWM_t
 
             for (;;)
             {
@@ -88,9 +88,9 @@ class CV_Core : public scheduler_task
                 {
 
                     // Todo: Logic & Limits Frame to pos = (frame % * (12.5-2.5)) + 2.5
-                    next_posx = ((next_frame.coordx * RANGE) + MIN);   ///< Base Servo
+                    PWM_BasePercentage.value = ((next_frame.coordx * RANGE) + MIN);   ///< Base Servo
                     next_posy = ((next_frame.coordy * RANGE) + MIN);   ///< Camera Servo
-                    diffx = abs(next_posx - current_posx);
+                    diffx = abs(PWM_BasePercentage.value - current_posx);
                     diffy = abs(next_posy - current_posy);
 
                     if(next_posx > current_posx && diffx > .1)
@@ -120,9 +120,9 @@ class CV_Core : public scheduler_task
                     }
 
                     PWM_BasePercentage.value = current_posx;
-                    PWM_HeadDegree.value = current_posy;
+                    PWM_Percentage.value = current_posy;
 
-                    if (errQUEUE_FULL == xQueueSend(PWM_QueueHandle, &PWM_HeadDegree, PWM_SendTimeout))
+                    if (errQUEUE_FULL == xQueueSend(PWM_QueueHandle, &PWM_Percentage, PWM_SendTimeout))
                         reportError(CV_Core_xQueueSend_To_motorTask);
                 }
                 else /* errQUEUE_Empty */ {
@@ -194,6 +194,7 @@ class visionTask : public scheduler_task
             if (pdTRUE == xQueueReceive(CV_QueueHandle, &raw, CV_ReceiveTimeout)) {
                 frame.coordx = ((((float)raw.coordx/(float)raw.framex)*(200))-(100));
                 frame.coordy = ((((float)raw.coordx/(float)raw.framex)*(200))-(100));
+                printf("%0.01f x %0.01f", frame.coordx, frame.coordy);
                 if (errQUEUE_FULL == xQueueSend(FRAME_QueueHandle, &frame, FRAME_SendTimeout))
                     reportError(visionTask_xQueueSend_To_CV_Core);
             }

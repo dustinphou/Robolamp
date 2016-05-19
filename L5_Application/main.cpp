@@ -61,13 +61,13 @@ class CV_Core : public scheduler_task
         bool run(void *p)
         {
 
-            PWM_t PWM_BaseDegree = {p2_0,       ///< Pin 2.0 (Base Servo)
+            PWM_t PWM_BasePercentage = {p2_0,       ///< Pin 2.0 (Base Servo)
                                     pwmDegree,  ///< Value type is in degrees
                                     0};         ///< Initial value
             PWM_t PWM_HeadDegree = {p2_1,       ///< Pin 2.1 (Base Servo)
                                     pwmDegree,  ///< Value type is in degrees
                                     0};         ///< Initial value
-            xQueueSend(PWM_QueueHandle, &PWM_BaseDegree, PWM_SendTimeout);  ///< Send initial PWM_t
+            xQueueSend(PWM_QueueHandle, &PWM_BasePercentage, PWM_SendTimeout);  ///< Send initial PWM_t
             xQueueSend(PWM_QueueHandle, &PWM_HeadDegree, PWM_SendTimeout);  ///< Send initial PWM_t
 
             for (;;)
@@ -113,7 +113,7 @@ class CV_Core : public scheduler_task
                         //stay in same position
                     }
 
-                    PWM_BaseDegree.value = current_posx;
+                    PWM_BasePercentage.value = current_posx;
                     PWM_HeadDegree.value = current_posy;
 
                     if (errQUEUE_FULL == xQueueSend(PWM_QueueHandle, &PWM_HeadDegree, PWM_SendTimeout))
@@ -305,11 +305,11 @@ class PWMTask : public scheduler_task
                         switch (signal.pin) {
                             case p2_0:
                                 if (false == setPercent(PWM_Base, signal.value, min2_0, max2_0))
-                                    reportError(PWMTask_setDegree_ExceedLimit_p2_0);
+                                    reportError(PWMTask_setPercent_ExceedLimit_p2_0);
                                 break;
                             case p2_1:
                                 if (false == setPercent(PWM_Head, signal.value, min2_1, max2_1))
-                                    reportError(PWMTask_setDegree_ExceedLimit_p2_1);
+                                    reportError(PWMTask_setPercent_ExceedLimit_p2_1);
                                 break;
                             case p2_5:
                                 if (false == setPercent(PWM_LED, signal.value, min2_5, max2_5))

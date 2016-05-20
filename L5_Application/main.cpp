@@ -49,9 +49,14 @@ class CV_Core : public scheduler_task
         QueueHandle_t ERR_QueueHandle;      ///< Contains data of type ERR_id from * to errorTask
         TickType_t FRAME_ReceiveTimeout;    ///< Max xTicksToWait for xQueueReceive
         TickType_t PWM_SendTimeout;         ///< Max xTicksToWait for xQueueSend
+        float BaseRatio;
+        float HeadRatio;
 
         PWM_t PWM_BaseDegree;           ///< PWM_t to xQueueSend to Pin 2.0 (Base Servo)
         PWM_t PWM_HeadDegree;           ///< PWM_t to xQueueSend to Pin 2.1 (Head Servo)
+
+        float next_posx;
+        float next_posy;
 
     public:
         CV_Core(uint8_t priority) : scheduler_task("core", 2048, priority),
@@ -59,9 +64,11 @@ class CV_Core : public scheduler_task
             FRAME_QueueHandle(xQueueCreate(4, sizeof(FRAME_t))),    ///< FRAME_QueueHandle
             PWM_QueueHandle(xQueueCreate(1, sizeof(PWM_t))),        ///< PWM_QueueHandle
             ERR_QueueHandle(xQueueCreate(1, sizeof(ERR_id))),       ///< ERR_QueueHandle
-            FRAME_ReceiveTimeout(1 * 1000 * portTICK_PERIOD_MS),    ///< 1 * 1000ms
+            FRAME_ReceiveTimeout(0 * 1 * 1000 * portTICK_PERIOD_MS),    ///< 1 * 1000ms
             PWM_SendTimeout(0 * portTICK_PERIOD_MS),                ///< 0ms
 
+            BaseRatio(.26),                                         ///< 52/100
+            HeadRatio(.18),                                         ///< 36/100
             PWM_BaseDegree{p2_0, pwmDegree, 0},                     ///< Pin 2.0 (Base Servo), Value type is in degrees, Initial value
             PWM_HeadDegree{p2_1, pwmDegree, 0}                      ///< Pin 2.1 (Head Servo), Value type is in degrees, Initial value
         {
@@ -81,64 +88,37 @@ class CV_Core : public scheduler_task
         FILE *fp;
         bool run(void *p)
         {
-            #define MAX_DEGREE .26
-            float current_posx = 0, current_posy = 0; //current position of motor, in %
-            int STEP = 5;
             FRAME_t next_frame_percentage;//ideal next position of motor, in x & y
-            float next_posx, next_posy; //next position of motor, in %
-            int diffx, diffy;
-            float sample_rate = 20;
+            float diffx, diffy;
+
             if (pdTRUE == xQueueReceive(FRAME_QueueHandle, &next_frame_percentage, FRAME_ReceiveTimeout))
             {
-                next_posx = next_frame_percentage.coordx * MAX_DEGREE;   ///< Base Servo
-                next_posy = next_frame_percentage.coordy * (.18);   ///< Camera Servo
-                diffx = (int)next_posx - (int)PWM_BaseDegree.value;
+                next_posx = next_frame_percentage.coordx * BaseRatio;   ///< Base Servo
+                next_posy = next_frame_percentage.coordy * HeadRatio;   ///< Camera Servo
+            }
+                diffx = next_posx * (1/50.0);
                 diffy = (int)next_posy - (int)PWM_HeadDegree.value;
-                fp = fopen("0:pixel.txt", "a");
-                fprintf(fp, "next_posx: %f  BaseDegree.value: %f  diffx: %i\n", next_posy, PWM_HeadDegree.value, diffy);
-                fclose(fp);
-                //PWM_BaseDegree.value += diffx;
-                PWM_HeadDegree.value += diffy;
-//                if(next_posx > PWM_BaseDegree.value)
-//                {
-//                    PWM_BaseDegree.value -= diffx;
-//                }
-//                else if (next_posx < PWM_BaseDegree.value)
-//                {
-//                    PWM_BaseDegree.value += diffx;
-//                }
-//                else
-//                {
-//                    //stay in same position
-//                }
 
-//                if(next_posy > current_posy && diffy > 5)
-//                {
-//                    current_posy = current_posy + diffy;
-//                }
-//                else if (next_posy < current_posy && diffy > 5)
-//                {
-//                    current_posy = current_posy - diffy;
-//                }
-//                else
-//                {
-//                    //stay in same position
-//                }
+//                fp = fopen("0:pixel.txt", "a");
+//                fprintf(fp, "next_posx: %f  BaseDegree.value: %f  diffx: %i\n", next_posy, PWM_HeadDegree.value, diffy);
+//                fclose(fp);
 
-                //PWM_BaseDegree.value = current_posx;
-                //PWM_HeadDegree.value = current_posy;
+                PWM_BaseDegree.value += diffx;
+//                PWM_HeadDegree.value += diffy;
+
                 if (errQUEUE_FULL == xQueueSend(PWM_QueueHandle, &PWM_BaseDegree, PWM_SendTimeout))
                     reportError(CV_Core_xQueueSend_To_motorTask);
                 if (errQUEUE_FULL == xQueueSend(PWM_QueueHandle, &PWM_HeadDegree, PWM_SendTimeout))
                     reportError(CV_Core_xQueueSend_To_motorTask);
-                vTaskDelay(1 / sample_rate);
-            }
+                vTaskDelay(1 / 50.0);
 
 
 
-            else /* errQUEUE_Empty */ {
-                reportError(CV_Core_xQueueReceive_From_visionTask);
-            }
+
+//            else /* errQUEUE_Empty */ {
+//                reportError(CV_Core_xQueueReceive_From_visionTask);
+//            }
+
             return true;
         }
 };

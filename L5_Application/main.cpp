@@ -143,13 +143,15 @@ class CV_Core : public scheduler_task
  */
 class LEDTask : public scheduler_task
 {
-        QueueHandle_t PWM_QueueHandle;      ///< Contains outgoing data of type PWM_t
-        TickType_t PWM_SendTimeout;         ///< Max xTicksToWait for xQueueReceive
+        QueueHandle_t PWM_QueueHandle;          ///< Contains outgoing data of type PWM_t
+        TickType_t PWM_SendTimeout;             ///< Max xTicksToWait for xQueueReceive
 
-        PWM_t PWM_LEDPercentage;            ///< PWM_t to xQueueSend
+        PWM_t PWM_LEDPercentage;                ///< PWM_t to xQueueSend
 
-        uint32_t LED_UpdateFrequencyInHz;   ///< Frequency at which to Update PWM_LEDPercentage in Hertz
-        float LED_UpdateStepInPercentage;   ///< Percentage of light to add to PWM_LEDPercentage per Update [Value is between 0 and 1]
+        uint32_t LED_UpdateFrequencyInHz;       ///< Frequency at which to Update PWM_LEDPercentage in Hertz
+        float LED_UpdateStepInPercentage;       ///< Percentage of light to add to PWM_LEDPercentage per Update [Value is between 0 and 100]
+        float LED_MinBrightnessInPercentage;    ///< Minimum Brightness of LED [Value is between 0 and 100]
+        float LED_MaxBrightnessInPercentage;    ///< Minimum Brightness of LED [Value is between 0 and 100]
 
     public:
         LEDTask(uint8_t priority) : scheduler_task("LED", 2048, priority),
@@ -159,14 +161,20 @@ class LEDTask : public scheduler_task
             PWM_LEDPercentage{p2_5, pwmPercent, 10},                ///< Pin 2.5 (Super LED), Value type is in percentages, Initial value
 
             LED_UpdateFrequencyInHz(60),        ///< Update Frequency
-            LED_UpdateStepInPercentage(0.01)    ///< Update Step
+            LED_UpdateStepInPercentage(1),      ///< Update Step
+            LED_MinBrightnessInPercentage(10),  ///< Minimum Brightness
+            LED_MaxBrightnessInPercentage(100)  ///< Maximum Brightness
         {
             /* Nothing to init */
         }
 
         bool run(void *p)
         {
-            PWM_LEDPercentage.value += (LED_UpdateStepInPercentage * (LS.getPercentValue() - PWM_LEDPercentage.value));
+            PWM_LEDPercentage.value += ((LED_UpdateStepInPercentage / 100) * (LS.getPercentValue() - PWM_LEDPercentage.value));
+            if (PWM_LEDPercentage.value < LED_MinBrightnessInPercentage)
+                PWM_LEDPercentage.value = LED_MinBrightnessInPercentage;
+            if (PWM_LEDPercentage.value > LED_MaxBrightnessInPercentage)
+                PWM_LEDPercentage.value = LED_MaxBrightnessInPercentage;
             if (errQUEUE_FULL == xQueueSend(PWM_QueueHandle, &PWM_LEDPercentage, PWM_SendTimeout))
                 reportError(LEDTask_xQueueSend_To_motorTask);
             vTaskDelay((1 / (float)LED_UpdateFrequencyInHz) * 1000 * portTICK_PERIOD_MS);

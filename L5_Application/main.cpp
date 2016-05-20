@@ -33,6 +33,7 @@
 /* LPC Libraries */
 #include "io.hpp"
 #include "lpc_pwm.hpp"
+#include <fstream>
 
 /* Custom Libraries */
 #include "cvtypes.hpp"  ///< Contains all structures and enumerations used by CV_Core
@@ -77,11 +78,11 @@ class CV_Core : public scheduler_task
 
             return true;
         }
-
+        FILE *fp;
         bool run(void *p)
         {
-            #define MAX_DEGREE 90
-            float current_posx = MAX_DEGREE/2, current_posy = MAX_DEGREE/2; //current position of motor, in %
+            #define MAX_DEGREE .26
+            float current_posx = 0, current_posy = 0; //current position of motor, in %
             int STEP = 5;
             FRAME_t next_frame_percentage;//ideal next position of motor, in x & y
             float next_posx, next_posy; //next position of motor, in %
@@ -90,38 +91,42 @@ class CV_Core : public scheduler_task
             if (pdTRUE == xQueueReceive(FRAME_QueueHandle, &next_frame_percentage, FRAME_ReceiveTimeout))
             {
                 next_posx = next_frame_percentage.coordx * MAX_DEGREE;   ///< Base Servo
-                next_posy = next_frame_percentage.coordy * MAX_DEGREE;   ///< Camera Servo
-                diffx = abs((int)next_posx - (int)current_posx);
-                diffy = abs((int)next_posy - (int)current_posy);
+                next_posy = next_frame_percentage.coordy * (.18);   ///< Camera Servo
+                diffx = (int)next_posx - (int)PWM_BaseDegree.value;
+                diffy = (int)next_posy - (int)PWM_HeadDegree.value;
+                fp = fopen("0:pixel.txt", "a");
+                fprintf(fp, "next_posx: %f  BaseDegree.value: %f  diffx: %i\n", next_posy, PWM_HeadDegree.value, diffy);
+                fclose(fp);
+                //PWM_BaseDegree.value += diffx;
+                PWM_HeadDegree.value += diffy;
+//                if(next_posx > PWM_BaseDegree.value)
+//                {
+//                    PWM_BaseDegree.value -= diffx;
+//                }
+//                else if (next_posx < PWM_BaseDegree.value)
+//                {
+//                    PWM_BaseDegree.value += diffx;
+//                }
+//                else
+//                {
+//                    //stay in same position
+//                }
 
-                if(next_posx > current_posx && diffx > 5)
-                {
-                    current_posx = current_posx + STEP%diffx;
-                }
-                else if (next_posx < current_posx && diffx > 5)
-                {
-                    current_posx = current_posx - STEP%diffx;
-                }
-                else
-                {
-                    //stay in same position
-                }
+//                if(next_posy > current_posy && diffy > 5)
+//                {
+//                    current_posy = current_posy + diffy;
+//                }
+//                else if (next_posy < current_posy && diffy > 5)
+//                {
+//                    current_posy = current_posy - diffy;
+//                }
+//                else
+//                {
+//                    //stay in same position
+//                }
 
-                if(next_posy > current_posy && diffy > 5)
-                {
-                    current_posy = current_posy + STEP%diffx;
-                }
-                else if (next_posy < current_posy && diffy > 5)
-                {
-                    current_posy = current_posy - STEP%diffx;
-                }
-                else
-                {
-                    //stay in same position
-                }
-
-                PWM_BaseDegree.value = current_posx;
-                PWM_HeadDegree.value = current_posy;
+                //PWM_BaseDegree.value = current_posx;
+                //PWM_HeadDegree.value = current_posy;
                 if (errQUEUE_FULL == xQueueSend(PWM_QueueHandle, &PWM_BaseDegree, PWM_SendTimeout))
                     reportError(CV_Core_xQueueSend_To_motorTask);
                 if (errQUEUE_FULL == xQueueSend(PWM_QueueHandle, &PWM_HeadDegree, PWM_SendTimeout))
@@ -197,7 +202,7 @@ class visionTask : public scheduler_task
         QueueHandle_t FRAME_QueueHandle;    ///< Contains outgoing data of type FRAME_t to CV_Core
         TickType_t CV_ReceiveTimeout;       ///< Max xTicksToWait for xQueueReceive
         TickType_t FRAME_SendTimeout;       ///< Max xTicksToWait for xQueueSend
-        FILE *fp;
+
     public:
         visionTask(uint8_t priority) : scheduler_task("vision", 2048, priority),
             CV_QueueHandle(getSharedObject(CV_QueueHandle_id)),         ///< CV_QueueHandle
@@ -214,10 +219,8 @@ class visionTask : public scheduler_task
             FRAME_t frame;
             if (pdTRUE == xQueueReceive(CV_QueueHandle, &raw, CV_ReceiveTimeout)) {
                 frame.coordx = ((((float)raw.coordx/(float)raw.framex)*(200))-(100));
-                frame.coordy = ((((float)raw.coordx/(float)raw.framex)*(200))-(100));
-                fp = fopen("0:pixel.txt", "a");
-                fprintf(fp, "%f0.01x%f0.01\n", frame.coordx, frame.coordy);
-                fclose(fp);
+                frame.coordy = -((((float)raw.coordy/(float)raw.framey)*(200))-(100));
+
                 if (errQUEUE_FULL == xQueueSend(FRAME_QueueHandle, &frame, FRAME_SendTimeout))
                     reportError(visionTask_xQueueSend_To_CV_Core);
             }
@@ -293,7 +296,7 @@ class PWMTask : public scheduler_task
                 return false;
             }
             else {
-                return pwm.set( ((degree/(rot/2))*((max-min)/2)) + ((max+min)/2) );
+                return pwm.set( max - (((degree/(rot/2))*((max-min)/2)) + ((max+min)/2)) );
             }
         }
 

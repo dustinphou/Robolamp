@@ -356,74 +356,6 @@ class PWMTask : public scheduler_task
         }
 };
 
-//For verification only, delete from final project
-//PWM_t degreet;
-//
-//class resetPositionTask : public scheduler_task
-//{
-//    public:
-//        resetPositionTask(uint8_t priority) : scheduler_task("resetP", 2048, priority)
-//    {
-//            //Init
-//    }
-//
-//
-//        bool run(void *p)
-//        {
-//            PWM servo0(PWM::pwm1, 50);
-//            PWM servo1(PWM::pwm2, 50);
-//            float max = 12.5, min = 2.5, mid = 7.4;
-//
-//            if(SW.getSwitch(4))
-//            {
-//                if(SW.getSwitch(1))
-//                {
-//                    if(degreet.p2_0 <= max)
-//                    degreet.p2_0 += .2;
-//                }
-//                else if(SW.getSwitch(2))
-//                {
-//                    degreet.p2_0 = mid;
-//                }
-//                else if(SW.getSwitch(3))
-//                {
-//                    if(degreet.p2_0 >= min)
-//                    degreet.p2_0 -= .2;
-//                }
-//                else
-//                {
-//                    //idle
-//                }
-//            }
-//            else
-//            {
-//                if(SW.getSwitch(1))
-//                {
-//                    if(degreet.p2_1 <= max) degreet.p2_1 += .2;
-//                }
-//                else if(SW.getSwitch(2))
-//                {
-//                    degreet.p2_1 = mid;
-//                }
-//                else if(SW.getSwitch(3))
-//                {
-//                    if(degreet.p2_1 >= min) degreet.p2_1 -= .2;
-//                }
-//                else
-//                {
-//                    //idle
-//                }
-//
-//            }
-//
-//            servo0.set(degreet.p2_0);
-//            servo1.set(degreet.p2_1);
-//            vTaskDelay(50);
-//
-//            return true;
-//        }
-//
-//};
 /**
  * errorTask controls all error signals.
  */
@@ -549,7 +481,6 @@ int main(void)
     scheduler_add_task(new visionTask(PRIORITY_MEDIUM));
     scheduler_add_task(new PWMTask(PRIORITY_MEDIUM));
     scheduler_add_task(new errorTask(PRIORITY_MEDIUM));
-//    scheduler_add_task(new resetPositionTask(PRIORITY_MEDIUM));
 
     /**
      * A few basic tasks for this bare-bone system :

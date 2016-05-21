@@ -115,7 +115,7 @@ class CV_Core : public scheduler_task
                 float FRAME_DegreeX = conversionRatio_DegreeX * frame.coordx;  // Range: -26 degrees to +26 degrees
                 float FRAME_DegreeY = conversionRatio_DegreeY * frame.coordy;  // Range: -18 degrees to +18 degrees
 
-                PWM_BaseDegreeTarget = PWM_BaseDegreeToSend.value + FRAME_DegreeX;
+                PWM_BaseDegreeTarget = PWM_BaseDegreeToSend.value - FRAME_DegreeX;      // Inverted Logic
                 PWM_HeadDegreeTarget = PWM_HeadDegreeToSend.value + FRAME_DegreeY;
 
                 if (PWM_BaseDegreeTarget < PWM_BaseMinDegree)

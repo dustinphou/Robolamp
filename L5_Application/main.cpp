@@ -78,7 +78,7 @@ class CV_Core : public scheduler_task
 
             FRAME_Previous{0, 0},                                   ///< Coordinate X (float), Coordinate Y (float)
             PWM_UpdateFrequencyInHz(50),                            ///< 50 Hz to match servo PWM frequency
-            PWM_UpdateStepPercentage(30),                           ///< 30% of degrees added per Update
+            PWM_UpdateStepPercentage(5),                            ///< 30% of degrees added per Update
 
             PWM_BaseDegreeTarget(0),                                ///< Target PWM_t->value to Update PWM_BaseDegreeToSend to (Base Servo)
             PWM_BaseMinDegree(-90),                                 ///< Max degree of Base Servo
@@ -131,7 +131,7 @@ class CV_Core : public scheduler_task
             }
 
             PWM_BaseDegreeToSend.value += (PWM_UpdateStepPercentage / 100) * (PWM_BaseDegreeTarget - PWM_BaseDegreeToSend.value);
-            PWM_HeadDegreeToSend.value += (PWM_UpdateStepPercentage / 100) * (PWM_HeadDegreeTarget - PWM_BaseDegreeToSend.value);
+            PWM_HeadDegreeToSend.value += (PWM_UpdateStepPercentage / 100) * (PWM_HeadDegreeTarget - PWM_HeadDegreeToSend.value);
 
             if (errQUEUE_FULL == xQueueSend(PWM_QueueHandle, &PWM_BaseDegreeToSend, PWM_SendTimeout))
                 reportError(CV_Core_xQueueSend_To_motorTask);
@@ -219,7 +219,7 @@ class visionTask : public scheduler_task
             FRAME_t frame;
             if (pdTRUE == xQueueReceive(CV_QueueHandle, &raw, CV_ReceiveTimeout)) {
                 frame.coordx = ((((float)raw.coordx/(float)raw.framex)*(200))-(100));
-                frame.coordy = -((((float)raw.coordy/(float)raw.framey)*(200))-(100));
+                frame.coordy = ((((float)raw.coordy/(float)raw.framey)*(200))-(100));
 
                 if (errQUEUE_FULL == xQueueSend(FRAME_QueueHandle, &frame, FRAME_SendTimeout))
                     reportError(visionTask_xQueueSend_To_CV_Core);
@@ -296,7 +296,7 @@ class PWMTask : public scheduler_task
                 return false;
             }
             else {
-                return pwm.set( max - (((degree/(rot/2))*((max-min)/2)) + ((max+min)/2)) );
+                return pwm.set( ((degree/(rot/2))*((max-min)/2)) + ((max+min)/2) );
             }
         }
 
@@ -339,7 +339,7 @@ class PWMTask : public scheduler_task
                             case p2_1:
                                 if (false == setDegree(PWM_Head, signal.value, min2_1, max2_1, rot2_1))
                                     reportError(PWMTask_setDegree_ExceedLimit_p2_1);
-                                break;
+                                    break;
                             default:
                                 reportError(PWMTask_setDegree_UndefinedPin);
                                 break;

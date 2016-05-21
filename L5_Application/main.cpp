@@ -50,7 +50,6 @@ class CV_Core : public scheduler_task
         TickType_t FRAME_ReceiveTimeout;    ///< Max xTicksToWait for xQueueReceive
         TickType_t PWM_SendTimeout;         ///< Max xTicksToWait for xQueueSend
 
-        FRAME_t FRAME_Previous;             ///< FRAME_t last received from visionTask
         float PWM_UpdateFrequencyInHz;      ///< Frequency at which to Update PWM_*DegreeToSend in Hertz
         float PWM_UpdateStepPercentage;     ///< Percentage of degrees to add per Update [Value is between 0 and 100]
 
@@ -76,7 +75,6 @@ class CV_Core : public scheduler_task
             FRAME_ReceiveTimeout(0 * portTICK_PERIOD_MS),           ///< 0ms
             PWM_SendTimeout(0 * portTICK_PERIOD_MS),                ///< 0ms
 
-            FRAME_Previous{0, 0},                                   ///< Coordinate X (float), Coordinate Y (float)
             PWM_UpdateFrequencyInHz(50),                            ///< 50 Hz to match servo PWM frequency
             PWM_UpdateStepPercentage(5),                            ///< 30% of degrees added per Update
 
@@ -109,12 +107,13 @@ class CV_Core : public scheduler_task
 
         bool run(void *p)
         {
-            if (pdTRUE == xQueueReceive(FRAME_QueueHandle, &FRAME_Previous, FRAME_ReceiveTimeout)) {
+            FRAME_t frame;
+            if (pdTRUE == xQueueReceive(FRAME_QueueHandle, &frame, FRAME_ReceiveTimeout)) {
                 float conversionRatio_DegreeX = ((CAM_ViewAngleHorizontal/100)/2);
                 float conversionRatio_DegreeY = ((CAM_ViewAngleVertical/100)/2);
 
-                float FRAME_DegreeX = conversionRatio_DegreeX * FRAME_Previous.coordx;  // Range: -26 degrees to +26 degrees
-                float FRAME_DegreeY = conversionRatio_DegreeY * FRAME_Previous.coordy;  // Range: -18 degrees to +18 degrees
+                float FRAME_DegreeX = conversionRatio_DegreeX * frame.coordx;  // Range: -26 degrees to +26 degrees
+                float FRAME_DegreeY = conversionRatio_DegreeY * frame.coordy;  // Range: -18 degrees to +18 degrees
 
                 PWM_BaseDegreeTarget = PWM_BaseDegreeToSend.value + FRAME_DegreeX;
                 PWM_HeadDegreeTarget = PWM_HeadDegreeToSend.value + FRAME_DegreeY;

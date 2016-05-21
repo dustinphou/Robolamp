@@ -51,11 +51,17 @@ class CV_Core : public scheduler_task
         TickType_t PWM_SendTimeout;         ///< Max xTicksToWait for xQueueSend
 
         FRAME_t FRAME_Previous;             ///< FRAME_t last received from visionTask
-        float PWM_BaseDegreeTarget;         ///< Target PWM_t->value to Update PWM_BaseDegreeToSend to (Base Servo)
-        float PWM_HeadDegreeTarget;         ///< Target PWM_t->value to Update PWM_HeadDegreeToSend to (Head Servo)
         float PWM_UpdateFrequencyInHz;      ///< Frequency at which to Update PWM_*DegreeToSend in Hertz
         float PWM_UpdateStepPercentage;     ///< Percentage of degrees to add per Update [Value is between 0 and 100]
+
+        float PWM_BaseDegreeTarget;         ///< Target PWM_t->value to Update PWM_BaseDegreeToSend to (Base Servo)
+        float PWM_BaseMinDegree;            ///< Max degree of Base Servo
+        float PWM_BaseMaxDegree;            ///< Max degree of Base Servo
         PWM_t PWM_BaseDegreeToSend;         ///< PWM_t to xQueueSend to Pin 2.0 per Update (Base Servo)
+
+        float PWM_HeadDegreeTarget;         ///< Target PWM_t->value to Update PWM_HeadDegreeToSend to (Head Servo)
+        float PWM_HeadMinDegree;            ///< Max degree of Head Servo
+        float PWM_HeadMaxDegree;            ///< Max degree of Head Servo
         PWM_t PWM_HeadDegreeToSend;         ///< PWM_t to xQueueSend to Pin 2.1 per Update (Head Servo)
 
         float CAM_ViewAngleHorizontal;      ///< Horizontal view angle of the camera
@@ -71,11 +77,17 @@ class CV_Core : public scheduler_task
             PWM_SendTimeout(0 * portTICK_PERIOD_MS),                ///< 0ms
 
             FRAME_Previous{0, 0},                                   ///< Coordinate X (float), Coordinate Y (float)
-            PWM_BaseDegreeTarget(0),                                ///< Target PWM_t->value to Update PWM_BaseDegreeToSend to (Base Servo)
-            PWM_HeadDegreeTarget(0),                                ///< Target PWM_t->value to Update PWM_HeadDegreeToSend to (Head Servo)
             PWM_UpdateFrequencyInHz(50),                            ///< 50 Hz to match servo PWM frequency
             PWM_UpdateStepPercentage(30),                           ///< 30% of degrees added per Update
+
+            PWM_BaseDegreeTarget(0),                                ///< Target PWM_t->value to Update PWM_BaseDegreeToSend to (Base Servo)
+            PWM_BaseMinDegree(-90),                                 ///< Max degree of Base Servo
+            PWM_BaseMaxDegree(90),                                  ///< Max degree of Base Servo
             PWM_BaseDegreeToSend{p2_0, pwmDegree, 0},               ///< Pin 2.0 (Base Servo), Value type is in degrees, Initial value
+
+            PWM_HeadDegreeTarget(0),                                ///< Target PWM_t->value to Update PWM_HeadDegreeToSend to (Head Servo)
+            PWM_HeadMinDegree(-90),                                 ///< Max degree of Head Servo
+            PWM_HeadMaxDegree(90),                                  ///< Max degree of Head Servo
             PWM_HeadDegreeToSend{p2_1, pwmDegree, 0},               ///< Pin 2.1 (Head Servo), Value type is in degrees, Initial value
 
             CAM_ViewAngleHorizontal(52),                            ///< 52 degrees
@@ -106,6 +118,11 @@ class CV_Core : public scheduler_task
 
                 PWM_BaseDegreeTarget = PWM_BaseDegreeToSend.value + FRAME_DegreeX;
                 PWM_HeadDegreeTarget = PWM_HeadDegreeToSend.value + FRAME_DegreeY;
+
+                if (PWM_BaseDegreeTarget < PWM_BaseMinDegree)
+                    PWM_BaseDegreeTarget = PWM_BaseMinDegree;
+                if (PWM_BaseDegreeTarget > PWM_BaseMaxDegree)
+                    PWM_BaseDegreeTarget = PWM_BaseMaxDegree;
             }
 
             PWM_BaseDegreeToSend.value += (PWM_UpdateStepPercentage / 100) * (PWM_BaseDegreeTarget - PWM_BaseDegreeToSend.value);

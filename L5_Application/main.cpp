@@ -49,14 +49,17 @@ class CV_Core : public scheduler_task
         QueueHandle_t ERR_QueueHandle;      ///< Contains data of type ERR_id from * to errorTask
         TickType_t FRAME_ReceiveTimeout;    ///< Max xTicksToWait for xQueueReceive
         TickType_t PWM_SendTimeout;         ///< Max xTicksToWait for xQueueSend
-        float BaseRatio;
-        float HeadRatio;
 
-        PWM_t PWM_BaseDegree;           ///< PWM_t to xQueueSend to Pin 2.0 (Base Servo)
-        PWM_t PWM_HeadDegree;           ///< PWM_t to xQueueSend to Pin 2.1 (Head Servo)
+        FRAME_t FRAME_Previous;             ///< FRAME_t last received from visionTask
+        float PWM_BaseDegreeTarget;         ///< Target PWM_t->value to Update PWM_BaseDegreeToSend to (Base Servo)
+        float PWM_HeadDegreeTarget;         ///< Target PWM_t->value to Update PWM_HeadDegreeToSend to (Head Servo)
+        float PWM_UpdateFrequencyInHz;      ///< Frequency at which to Update PWM_*DegreeToSend in Hertz
+        float PWM_UpdateStepPercentage;     ///< Percentage of degrees to add per Update [Value is between 0 and 100]
+        PWM_t PWM_BaseDegreeToSend;         ///< PWM_t to xQueueSend to Pin 2.0 per Update (Base Servo)
+        PWM_t PWM_HeadDegreeToSend;         ///< PWM_t to xQueueSend to Pin 2.1 per Update (Head Servo)
 
-        float next_posx;
-        float next_posy;
+        float CAM_ViewAngleHorizontal;      ///< Horizontal view angle of the camera
+        float CAM_ViewAngleVertical;        ///< Vertical view angle of the camera
 
     public:
         CV_Core(uint8_t priority) : scheduler_task("core", 2048, priority),
@@ -64,13 +67,19 @@ class CV_Core : public scheduler_task
             FRAME_QueueHandle(xQueueCreate(4, sizeof(FRAME_t))),    ///< FRAME_QueueHandle
             PWM_QueueHandle(xQueueCreate(1, sizeof(PWM_t))),        ///< PWM_QueueHandle
             ERR_QueueHandle(xQueueCreate(1, sizeof(ERR_id))),       ///< ERR_QueueHandle
-            FRAME_ReceiveTimeout(0 * 1 * 1000 * portTICK_PERIOD_MS),    ///< 1 * 1000ms
+            FRAME_ReceiveTimeout(0 * portTICK_PERIOD_MS),           ///< 0ms
             PWM_SendTimeout(0 * portTICK_PERIOD_MS),                ///< 0ms
 
-            BaseRatio(.26),                                         ///< 52/100
-            HeadRatio(.18),                                         ///< 36/100
-            PWM_BaseDegree{p2_0, pwmDegree, 0},                     ///< Pin 2.0 (Base Servo), Value type is in degrees, Initial value
-            PWM_HeadDegree{p2_1, pwmDegree, 0}                      ///< Pin 2.1 (Head Servo), Value type is in degrees, Initial value
+            FRAME_Previous{0, 0},                                   ///< Coordinate X (float), Coordinate Y (float)
+            PWM_BaseDegreeTarget(0),                                ///< Target PWM_t->value to Update PWM_BaseDegreeToSend to (Base Servo)
+            PWM_HeadDegreeTarget(0),                                ///< Target PWM_t->value to Update PWM_HeadDegreeToSend to (Head Servo)
+            PWM_UpdateFrequencyInHz(50),                            ///< 50 Hz to match servo PWM frequency
+            PWM_UpdateStepPercentage(30),                           ///< 30% of degrees added per Update
+            PWM_BaseDegreeToSend{p2_0, pwmDegree, 0},               ///< Pin 2.0 (Base Servo), Value type is in degrees, Initial value
+            PWM_HeadDegreeToSend{p2_1, pwmDegree, 0},               ///< Pin 2.1 (Head Servo), Value type is in degrees, Initial value
+
+            CAM_ViewAngleHorizontal(52),                            ///< 52 degrees
+            CAM_ViewAngleVertical(36)                               ///< 36 degrees
         {
             addSharedObject(CV_QueueHandle_id, CV_QueueHandle);         ///< Shares CV_QueueHandle
             addSharedObject(FRAME_QueueHandle_id, FRAME_QueueHandle);   ///< Shares FRAME_QueueHandle
@@ -80,45 +89,34 @@ class CV_Core : public scheduler_task
 
         bool taskEntry(void)
         {
-            xQueueSend(PWM_QueueHandle, &PWM_BaseDegree, PWM_SendTimeout);  ///< Send initial PWM_t
-            xQueueSend(PWM_QueueHandle, &PWM_HeadDegree, PWM_SendTimeout);  ///< Send initial PWM_t
+            xQueueSend(PWM_QueueHandle, &PWM_BaseDegreeToSend, PWM_SendTimeout);  ///< Send initial PWM_t
+            xQueueSend(PWM_QueueHandle, &PWM_HeadDegreeToSend, PWM_SendTimeout);  ///< Send initial PWM_t
 
             return true;
         }
-        FILE *fp;
+
         bool run(void *p)
         {
-            FRAME_t next_frame_percentage;//ideal next position of motor, in x & y
-            float diffx, diffy;
+            if (pdTRUE == xQueueReceive(FRAME_QueueHandle, &FRAME_Previous, FRAME_ReceiveTimeout)) {
+                float conversionRatio_DegreeX = ((CAM_ViewAngleHorizontal/100)/2);
+                float conversionRatio_DegreeY = ((CAM_ViewAngleVertical/100)/2);
 
-            if (pdTRUE == xQueueReceive(FRAME_QueueHandle, &next_frame_percentage, FRAME_ReceiveTimeout))
-            {
-                next_posx = next_frame_percentage.coordx * BaseRatio;   ///< Base Servo
-                next_posy = next_frame_percentage.coordy * HeadRatio;   ///< Camera Servo
+                float FRAME_DegreeX = conversionRatio_DegreeX * FRAME_Previous.coordx;  // Range: -26 degrees to +26 degrees
+                float FRAME_DegreeY = conversionRatio_DegreeY * FRAME_Previous.coordy;  // Range: -18 degrees to +18 degrees
+
+                PWM_BaseDegreeTarget = PWM_BaseDegreeToSend.value + FRAME_DegreeX;
+                PWM_HeadDegreeTarget = PWM_HeadDegreeToSend.value + FRAME_DegreeY;
             }
-                diffx = next_posx * (1/50.0);
-                diffy = (int)next_posy - (int)PWM_HeadDegree.value;
 
-//                fp = fopen("0:pixel.txt", "a");
-//                fprintf(fp, "next_posx: %f  BaseDegree.value: %f  diffx: %i\n", next_posy, PWM_HeadDegree.value, diffy);
-//                fclose(fp);
+            PWM_BaseDegreeToSend.value += (PWM_UpdateStepPercentage / 100) * (PWM_BaseDegreeTarget - PWM_BaseDegreeToSend.value);
+            PWM_HeadDegreeToSend.value += (PWM_UpdateStepPercentage / 100) * (PWM_HeadDegreeTarget - PWM_BaseDegreeToSend.value);
 
-                PWM_BaseDegree.value += diffx;
-//                PWM_HeadDegree.value += diffy;
+            if (errQUEUE_FULL == xQueueSend(PWM_QueueHandle, &PWM_BaseDegreeToSend, PWM_SendTimeout))
+                reportError(CV_Core_xQueueSend_To_motorTask);
+            if (errQUEUE_FULL == xQueueSend(PWM_QueueHandle, &PWM_HeadDegreeToSend, PWM_SendTimeout))
+                reportError(CV_Core_xQueueSend_To_motorTask);
 
-                if (errQUEUE_FULL == xQueueSend(PWM_QueueHandle, &PWM_BaseDegree, PWM_SendTimeout))
-                    reportError(CV_Core_xQueueSend_To_motorTask);
-                if (errQUEUE_FULL == xQueueSend(PWM_QueueHandle, &PWM_HeadDegree, PWM_SendTimeout))
-                    reportError(CV_Core_xQueueSend_To_motorTask);
-                vTaskDelay(1 / 50.0);
-
-
-
-
-//            else /* errQUEUE_Empty */ {
-//                reportError(CV_Core_xQueueReceive_From_visionTask);
-//            }
-
+            vTaskDelay((1 / PWM_UpdateFrequencyInHz) * 1000 * portTICK_PERIOD_MS);
             return true;
         }
 };
@@ -133,7 +131,7 @@ class LEDTask : public scheduler_task
 
         PWM_t PWM_LEDPercentage;            ///< PWM_t to xQueueSend
 
-        uint32_t LED_UpdateFrequencyInHz;   ///< Frequency at which to Update PWM_LEDPercentage in Hertz
+        float LED_UpdateFrequencyInHz;      ///< Frequency at which to Update PWM_LEDPercentage in Hertz
         float LED_UpdateStepInPercentage;   ///< Percentage of light to add per Update [Value is between 0 and 100]
         float LED_MinOutputPercentage;      ///< Minimum Brightness of LED [Value is between 0 and 100]
         float LED_MaxOutputPercentage;      ///< Maximum Brightness of LED [Value is between 0 and 100]
@@ -147,8 +145,8 @@ class LEDTask : public scheduler_task
 
             PWM_LEDPercentage{p2_5, pwmPercent, 10},                ///< Pin 2.5 (Super LED), Value type is in percentages, Initial value
 
-            LED_UpdateFrequencyInHz(60),    ///< Update Frequency
-            LED_UpdateStepInPercentage(1),  ///< Update Step
+            LED_UpdateFrequencyInHz(10),    ///< Update Frequency = 10 Hz
+            LED_UpdateStepInPercentage(10), ///< Update Step = 10 %
             LED_MinOutputPercentage(50),    ///< Minimum LED Brightness
             LED_MaxOutputPercentage(100),   ///< Maximum LED Brightness
             ENV_MinInputPercentage(0),      ///< Minimum Environment Brightness
@@ -168,7 +166,7 @@ class LEDTask : public scheduler_task
                 PWM_LEDPercentage.value = LED_MaxOutputPercentage;
             if (errQUEUE_FULL == xQueueSend(PWM_QueueHandle, &PWM_LEDPercentage, PWM_SendTimeout))
                 reportError(LEDTask_xQueueSend_To_motorTask);
-            vTaskDelay((1 / (float)LED_UpdateFrequencyInHz) * 1000 * portTICK_PERIOD_MS);
+            vTaskDelay((1 / LED_UpdateFrequencyInHz) * 1000 * portTICK_PERIOD_MS);
             return true;
         }
 };

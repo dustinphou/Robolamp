@@ -123,6 +123,11 @@ class CV_Core : public scheduler_task
                     PWM_BaseDegreeTarget = PWM_BaseMinDegree;
                 if (PWM_BaseDegreeTarget > PWM_BaseMaxDegree)
                     PWM_BaseDegreeTarget = PWM_BaseMaxDegree;
+
+                if (PWM_HeadDegreeTarget < PWM_HeadMinDegree)
+                    PWM_HeadDegreeTarget = PWM_HeadMinDegree;
+                if (PWM_HeadDegreeTarget > PWM_HeadMaxDegree)
+                    PWM_HeadDegreeTarget = PWM_HeadMaxDegree;
             }
 
             PWM_BaseDegreeToSend.value += (PWM_UpdateStepPercentage / 100) * (PWM_BaseDegreeTarget - PWM_BaseDegreeToSend.value);

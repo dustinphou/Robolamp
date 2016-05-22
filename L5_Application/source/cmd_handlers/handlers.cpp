@@ -55,6 +55,7 @@ CMD_HANDLER_FUNC(roboLampHandler)
         reportError(roboLampHandler_cmdParams_scanf);
         return true;
     }
+    raw.coordy = raw.framey - raw.coordy;   // Flips camera verticals from (top = 0, bottom = n) to (top = n, bottom = 0)
     TickType_t CV_SendTimeout = 0 * portTICK_PERIOD_MS; // 0ms
     if (errQUEUE_FULL == xQueueSend(scheduler_task::getSharedObject(CV_QueueHandle_id), &raw, CV_SendTimeout)) {
         reportError(roboLampHandler_xQueueSend_To_visionTask);

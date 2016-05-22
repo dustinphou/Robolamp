@@ -90,7 +90,7 @@ class CV_Core : public scheduler_task
             PWM_HeadMaxDegree(0),                                   ///< Max degree of Head Servo
             PWM_HeadDegreeToSend{p2_1, pwmDegree, 0},               ///< Pin 2.1 (Head Servo), Value type is in degrees, Initial value
 
-            CAM_ViewAngleHorizontal(50),                            ///< 50 degrees
+            CAM_ViewAngleHorizontal(48),                            ///< 48 degrees
             CAM_ViewAngleVertical(36),                              ///< 36 degrees
             CAM_DegreeBeforeStartFollowing(5),                      ///< 5 degrees
             CAM_DegreeBeforeStopFollowing(5)                        ///< 5 degrees
@@ -116,21 +116,21 @@ class CV_Core : public scheduler_task
                 float conversionRatio_DegreeX = ((CAM_ViewAngleHorizontal/100)/2);
                 float conversionRatio_DegreeY = ((CAM_ViewAngleVertical/100)/2);
 
-                float FRAME_DegreeX = conversionRatio_DegreeX * frame.coordx;                       // Range: -25 degrees to +25 degrees
+                float FRAME_DegreeX = conversionRatio_DegreeX * frame.coordx;                       // Range: -24 degrees to +24 degrees
                 float FRAME_DegreeY = conversionRatio_DegreeY * frame.coordy;                       // Range: -18 degrees to +18 degrees
 
                 float FRAME_OffsetX = ((FRAME_DegreeX > 0) ? (FRAME_DegreeX) : (-FRAME_DegreeX));   // Absolute distance from origin
                 float FRAME_OffsetY = ((FRAME_DegreeY > 0) ? (FRAME_DegreeY) : (-FRAME_DegreeY));   // Absolute distance from origin
 
                 if (FRAME_OffsetX > CAM_DegreeBeforeStartFollowing) {
-                    PWM_BaseDegreeTarget = PWM_BaseDegreeToSend.value - FRAME_DegreeX;              // Inverted Logic
+                    PWM_BaseDegreeTarget = PWM_BaseDegreeToSend.value - FRAME_DegreeX;              // Inverted Rotation Logic
                     if (PWM_BaseDegreeTarget < PWM_BaseMinDegree)
                         PWM_BaseDegreeTarget = PWM_BaseMinDegree;
                     if (PWM_BaseDegreeTarget > PWM_BaseMaxDegree)
                         PWM_BaseDegreeTarget = PWM_BaseMaxDegree;
                 }
                 if (FRAME_OffsetY > CAM_DegreeBeforeStartFollowing) {
-                    PWM_HeadDegreeTarget = PWM_HeadDegreeToSend.value + FRAME_DegreeY;
+                    PWM_HeadDegreeTarget = PWM_HeadDegreeToSend.value - FRAME_DegreeY;              // Inverted Rotation Logic
                     if (PWM_HeadDegreeTarget < PWM_HeadMinDegree)
                         PWM_HeadDegreeTarget = PWM_HeadMinDegree;
                     if (PWM_HeadDegreeTarget > PWM_HeadMaxDegree)

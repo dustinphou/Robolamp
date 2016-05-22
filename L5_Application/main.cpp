@@ -33,7 +33,7 @@
 /* LPC Libraries */
 #include "io.hpp"
 #include "lpc_pwm.hpp"
-#include <fstream>
+#include "storage.hpp"
 
 /* Custom Libraries */
 #include "cvtypes.hpp"  ///< Contains all structures and enumerations used by CV_Core
@@ -43,6 +43,8 @@
  */
 class CV_Core : public scheduler_task
 {
+        const char *initpos_Filename;           ///< Filename of file containing PWM init Position [(float)BaseDegree, (float)HeadDegree]
+
         QueueHandle_t CV_QueueHandle;           ///< Contains data of type CV_t from roboLampHandler to visionTask
         QueueHandle_t FRAME_QueueHandle;        ///< Contains incoming data of type FRAME_t in percentages from visionTask
         QueueHandle_t PWM_QueueHandle;          ///< Contains outgoing data of type PWM_t in degrees from CV_Core and LEDTask to PWMTask
@@ -70,6 +72,8 @@ class CV_Core : public scheduler_task
 
     public:
         CV_Core(uint8_t priority) : scheduler_task("core", 2048, priority),
+            initpos_Filename("initpos"),                            ///< PWM init Filename
+
             CV_QueueHandle(xQueueCreate(1, sizeof(CV_t))),          ///< CV_QueueHandle
             FRAME_QueueHandle(xQueueCreate(4, sizeof(FRAME_t))),    ///< FRAME_QueueHandle
             PWM_QueueHandle(xQueueCreate(1, sizeof(PWM_t))),        ///< PWM_QueueHandle
@@ -83,18 +87,26 @@ class CV_Core : public scheduler_task
             PWM_BaseDegreeTarget(0),                                ///< Target PWM_t->value to Update PWM_BaseDegreeToSend to (Base Servo)
             PWM_BaseDegreeLeftLimit(90),                            ///< Max leftward degree of Base Servo
             PWM_BaseDegreeRightLimit(90),                           ///< Max rightward degree of Base Servo
-            PWM_BaseDegreeToSend{p2_0, pwmDegree, 0},               ///< Pin 2.0 (Base Servo), Value type is in degrees, Initial value
+            PWM_BaseDegreeToSend{p2_0, pwmDegree, 0},               ///< Pin 2.0 (Base Servo), Value in degrees, Initial value if Init fails
 
             PWM_HeadDegreeTarget(0),                                ///< Target PWM_t->value to Update PWM_HeadDegreeToSend to (Head Servo)
             PWM_HeadDegreeUpperLimit(0),                            ///< Max upward degree of Head Servo
             PWM_HeadDegreeLowerLimit(90),                           ///< Max downward degree of Head Servo
-            PWM_HeadDegreeToSend{p2_1, pwmDegree, 0},               ///< Pin 2.1 (Head Servo), Value type is in degrees, Initial value
+            PWM_HeadDegreeToSend{p2_1, pwmDegree, 0},               ///< Pin 2.1 (Head Servo), Value in degrees, Initial value if Init fails
 
             CAM_ViewAngleHorizontal(48),                            ///< 48 degrees
             CAM_ViewAngleVertical(36),                              ///< 36 degrees
             CAM_DegreeBeforeStartFollowing(5),                      ///< 5 degrees
             CAM_DegreeBeforeStopFollowing(5)                        ///< 5 degrees
         {
+            float initpos_Data[2];                                  ///< Reads last targeted position from file
+            if (FR_OK == Storage::read(initpos_Filename, initpos_Data, sizeof(initpos_Data))) {
+                PWM_BaseDegreeToSend.value = initpos_Data[0];
+                PWM_HeadDegreeToSend.value = initpos_Data[1];
+            }
+            else {
+                reportError(CV_Core_Storage_read_not_OK);
+            }
             addSharedObject(CV_QueueHandle_id, CV_QueueHandle);         ///< Shares CV_QueueHandle
             addSharedObject(FRAME_QueueHandle_id, FRAME_QueueHandle);   ///< Shares FRAME_QueueHandle
             addSharedObject(PWM_QueueHandle_id, PWM_QueueHandle);       ///< Shares PWM_QueueHandle
@@ -122,19 +134,24 @@ class CV_Core : public scheduler_task
                 float FRAME_OffsetX = ((FRAME_DegreeX > 0) ? (FRAME_DegreeX) : (-FRAME_DegreeX));   // Absolute distance from origin
                 float FRAME_OffsetY = ((FRAME_DegreeY > 0) ? (FRAME_DegreeY) : (-FRAME_DegreeY));   // Absolute distance from origin
 
-                if (FRAME_OffsetX > CAM_DegreeBeforeStartFollowing) {
-                    PWM_BaseDegreeTarget = PWM_BaseDegreeToSend.value - FRAME_DegreeX;              // Inverted Rotation Logic
-                    if (PWM_BaseDegreeTarget < (-PWM_BaseDegreeRightLimit)) // Servo right is negative
-                        PWM_BaseDegreeTarget = (-PWM_BaseDegreeRightLimit); // Servo right is negative
-                    if (PWM_BaseDegreeTarget > (+PWM_BaseDegreeLeftLimit )) // Servo left is positive
-                        PWM_BaseDegreeTarget = (+PWM_BaseDegreeLeftLimit ); // Servo left is positive
-                }
-                if (FRAME_OffsetY > CAM_DegreeBeforeStartFollowing) {
-                    PWM_HeadDegreeTarget = PWM_HeadDegreeToSend.value - FRAME_DegreeY;              // Inverted Rotation Logic
-                    if (PWM_HeadDegreeTarget < (-PWM_HeadDegreeUpperLimit)) // Servo up is negative
-                        PWM_HeadDegreeTarget = (-PWM_HeadDegreeUpperLimit); // Servo up is negative
-                    if (PWM_HeadDegreeTarget > (+PWM_HeadDegreeLowerLimit)) // Servo down is positive
-                        PWM_HeadDegreeTarget = (+PWM_HeadDegreeLowerLimit); // Servo down is positive
+                if (FRAME_OffsetX > CAM_DegreeBeforeStartFollowing || FRAME_OffsetY > CAM_DegreeBeforeStartFollowing) {
+                    if (FRAME_OffsetX > CAM_DegreeBeforeStartFollowing) {
+                        PWM_BaseDegreeTarget = PWM_BaseDegreeToSend.value - FRAME_DegreeX;          // Inverted Rotation Logic
+                        if (PWM_BaseDegreeTarget < (-PWM_BaseDegreeRightLimit)) // Servo right is negative
+                            PWM_BaseDegreeTarget = (-PWM_BaseDegreeRightLimit); // Servo right is negative
+                        if (PWM_BaseDegreeTarget > (+PWM_BaseDegreeLeftLimit )) // Servo left is positive
+                            PWM_BaseDegreeTarget = (+PWM_BaseDegreeLeftLimit ); // Servo left is positive
+                    }
+                    if (FRAME_OffsetY > CAM_DegreeBeforeStartFollowing) {
+                        PWM_HeadDegreeTarget = PWM_HeadDegreeToSend.value - FRAME_DegreeY;          // Inverted Rotation Logic
+                        if (PWM_HeadDegreeTarget < (-PWM_HeadDegreeUpperLimit)) // Servo up is negative
+                            PWM_HeadDegreeTarget = (-PWM_HeadDegreeUpperLimit); // Servo up is negative
+                        if (PWM_HeadDegreeTarget > (+PWM_HeadDegreeLowerLimit)) // Servo down is positive
+                            PWM_HeadDegreeTarget = (+PWM_HeadDegreeLowerLimit); // Servo down is positive
+                    }
+                    float initpos_Data[2] = {PWM_BaseDegreeTarget, PWM_HeadDegreeTarget};           // Writes last targeted position to file
+                    if (FR_OK != Storage::write(initpos_Filename, initpos_Data, sizeof(initpos_Data)))
+                        reportError(CV_Core_Storage_write_not_OK);
                 }
             }
 
@@ -442,6 +459,12 @@ class errorTask : public scheduler_task
                         break;
                     case CV_Core_xQueueSend_To_motorTask:
                         LED_Display("CO");
+                        break;
+                    case CV_Core_Storage_read_not_OK:
+                        LED_Display("CR");
+                        break;
+                    case CV_Core_Storage_write_not_OK:
+                        LED_Display("CW");
                         break;
                     case LEDTask_xQueueSend_To_motorTask:
                         LED_Display("LO");

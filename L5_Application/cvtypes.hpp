@@ -26,6 +26,8 @@ enum ERR_id
     visionTask_xQueueSend_To_CV_Core,
     CV_Core_xQueueReceive_From_visionTask,
     CV_Core_xQueueSend_To_motorTask,
+    CV_Core_Storage_read_not_OK,
+    CV_Core_Storage_write_not_OK,
     LEDTask_xQueueSend_To_motorTask,
     PWMTask_xQueueReceiveFrom_CV_Core,
     PWMTask_setDegree_ExceedLimit_p2_0,

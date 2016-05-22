@@ -43,28 +43,30 @@
  */
 class CV_Core : public scheduler_task
 {
-        QueueHandle_t CV_QueueHandle;       ///< Contains data of type CV_t from roboLampHandler to visionTask
-        QueueHandle_t FRAME_QueueHandle;    ///< Contains incoming data of type FRAME_t in percentages from visionTask
-        QueueHandle_t PWM_QueueHandle;      ///< Contains outgoing data of type PWM_t in degrees from CV_Core and LEDTask to PWMTask
-        QueueHandle_t ERR_QueueHandle;      ///< Contains data of type ERR_id from * to errorTask
-        TickType_t FRAME_ReceiveTimeout;    ///< Max xTicksToWait for xQueueReceive
-        TickType_t PWM_SendTimeout;         ///< Max xTicksToWait for xQueueSend
+        QueueHandle_t CV_QueueHandle;           ///< Contains data of type CV_t from roboLampHandler to visionTask
+        QueueHandle_t FRAME_QueueHandle;        ///< Contains incoming data of type FRAME_t in percentages from visionTask
+        QueueHandle_t PWM_QueueHandle;          ///< Contains outgoing data of type PWM_t in degrees from CV_Core and LEDTask to PWMTask
+        QueueHandle_t ERR_QueueHandle;          ///< Contains data of type ERR_id from * to errorTask
+        TickType_t FRAME_ReceiveTimeout;        ///< Max xTicksToWait for xQueueReceive
+        TickType_t PWM_SendTimeout;             ///< Max xTicksToWait for xQueueSend
 
-        float PWM_UpdateFrequencyInHz;      ///< Frequency at which to Update PWM_*DegreeToSend in Hertz
-        float PWM_UpdateStepPercentage;     ///< Percentage of degrees to add per Update [Value is between 0 and 100]
+        float PWM_UpdateFrequencyInHz;          ///< Frequency at which to Update PWM_*DegreeToSend in Hertz
+        float PWM_UpdateStepPercentage;         ///< Percentage of degrees to add per Update [Value is between 0 and 100]
 
-        float PWM_BaseDegreeTarget;         ///< Target PWM_t->value to Update PWM_BaseDegreeToSend to (Base Servo)
-        float PWM_BaseMinDegree;            ///< Max degree of Base Servo
-        float PWM_BaseMaxDegree;            ///< Max degree of Base Servo
-        PWM_t PWM_BaseDegreeToSend;         ///< PWM_t to xQueueSend to Pin 2.0 per Update (Base Servo)
+        float PWM_BaseDegreeTarget;             ///< Target PWM_t->value to Update PWM_BaseDegreeToSend to (Base Servo)
+        float PWM_BaseMinDegree;                ///< Max degree of Base Servo
+        float PWM_BaseMaxDegree;                ///< Max degree of Base Servo
+        PWM_t PWM_BaseDegreeToSend;             ///< PWM_t to xQueueSend to Pin 2.0 per Update (Base Servo)
 
-        float PWM_HeadDegreeTarget;         ///< Target PWM_t->value to Update PWM_HeadDegreeToSend to (Head Servo)
-        float PWM_HeadMinDegree;            ///< Max degree of Head Servo
-        float PWM_HeadMaxDegree;            ///< Max degree of Head Servo
-        PWM_t PWM_HeadDegreeToSend;         ///< PWM_t to xQueueSend to Pin 2.1 per Update (Head Servo)
+        float PWM_HeadDegreeTarget;             ///< Target PWM_t->value to Update PWM_HeadDegreeToSend to (Head Servo)
+        float PWM_HeadMinDegree;                ///< Max degree of Head Servo
+        float PWM_HeadMaxDegree;                ///< Max degree of Head Servo
+        PWM_t PWM_HeadDegreeToSend;             ///< PWM_t to xQueueSend to Pin 2.1 per Update (Head Servo)
 
-        float CAM_ViewAngleHorizontal;      ///< Horizontal view angle of the camera
-        float CAM_ViewAngleVertical;        ///< Vertical view angle of the camera
+        float CAM_ViewAngleHorizontal;          ///< Horizontal view angle of the camera
+        float CAM_ViewAngleVertical;            ///< Vertical view angle of the camera
+        float CAM_DegreeBeforeStartFollowing;   ///< Degree of displacement from origin before starting to follow the target
+        float CAM_DegreeBeforeStopFollowing;    ///< Degree of displacement from origin before stopping to follow the target
 
     public:
         CV_Core(uint8_t priority) : scheduler_task("core", 2048, priority),
@@ -85,11 +87,13 @@ class CV_Core : public scheduler_task
 
             PWM_HeadDegreeTarget(0),                                ///< Target PWM_t->value to Update PWM_HeadDegreeToSend to (Head Servo)
             PWM_HeadMinDegree(-90),                                 ///< Max degree of Head Servo
-            PWM_HeadMaxDegree(90),                                  ///< Max degree of Head Servo
+            PWM_HeadMaxDegree(0),                                   ///< Max degree of Head Servo
             PWM_HeadDegreeToSend{p2_1, pwmDegree, 0},               ///< Pin 2.1 (Head Servo), Value type is in degrees, Initial value
 
-            CAM_ViewAngleHorizontal(52),                            ///< 52 degrees
-            CAM_ViewAngleVertical(36)                               ///< 36 degrees
+            CAM_ViewAngleHorizontal(50),                            ///< 50 degrees
+            CAM_ViewAngleVertical(36),                              ///< 36 degrees
+            CAM_DegreeBeforeStartFollowing(5),                      ///< 5 degrees
+            CAM_DegreeBeforeStopFollowing(5)                        ///< 5 degrees
         {
             addSharedObject(CV_QueueHandle_id, CV_QueueHandle);         ///< Shares CV_QueueHandle
             addSharedObject(FRAME_QueueHandle_id, FRAME_QueueHandle);   ///< Shares FRAME_QueueHandle
@@ -112,31 +116,44 @@ class CV_Core : public scheduler_task
                 float conversionRatio_DegreeX = ((CAM_ViewAngleHorizontal/100)/2);
                 float conversionRatio_DegreeY = ((CAM_ViewAngleVertical/100)/2);
 
-                float FRAME_DegreeX = conversionRatio_DegreeX * frame.coordx;  // Range: -26 degrees to +26 degrees
-                float FRAME_DegreeY = conversionRatio_DegreeY * frame.coordy;  // Range: -18 degrees to +18 degrees
+                float FRAME_DegreeX = conversionRatio_DegreeX * frame.coordx;                       // Range: -25 degrees to +25 degrees
+                float FRAME_DegreeY = conversionRatio_DegreeY * frame.coordy;                       // Range: -18 degrees to +18 degrees
 
-                PWM_BaseDegreeTarget = PWM_BaseDegreeToSend.value - FRAME_DegreeX;      // Inverted Logic
-                PWM_HeadDegreeTarget = PWM_HeadDegreeToSend.value + FRAME_DegreeY;
+                float FRAME_OffsetX = ((FRAME_DegreeX > 0) ? (FRAME_DegreeX) : (-FRAME_DegreeX));   // Absolute distance from origin
+                float FRAME_OffsetY = ((FRAME_DegreeY > 0) ? (FRAME_DegreeY) : (-FRAME_DegreeY));   // Absolute distance from origin
 
-                if (PWM_BaseDegreeTarget < PWM_BaseMinDegree)
-                    PWM_BaseDegreeTarget = PWM_BaseMinDegree;
-                if (PWM_BaseDegreeTarget > PWM_BaseMaxDegree)
-                    PWM_BaseDegreeTarget = PWM_BaseMaxDegree;
-
-                if (PWM_HeadDegreeTarget < PWM_HeadMinDegree)
-                    PWM_HeadDegreeTarget = PWM_HeadMinDegree;
-                if (PWM_HeadDegreeTarget > PWM_HeadMaxDegree)
-                    PWM_HeadDegreeTarget = PWM_HeadMaxDegree;
+                if (FRAME_OffsetX > CAM_DegreeBeforeStartFollowing) {
+                    PWM_BaseDegreeTarget = PWM_BaseDegreeToSend.value - FRAME_DegreeX;              // Inverted Logic
+                    if (PWM_BaseDegreeTarget < PWM_BaseMinDegree)
+                        PWM_BaseDegreeTarget = PWM_BaseMinDegree;
+                    if (PWM_BaseDegreeTarget > PWM_BaseMaxDegree)
+                        PWM_BaseDegreeTarget = PWM_BaseMaxDegree;
+                }
+                if (FRAME_OffsetY > CAM_DegreeBeforeStartFollowing) {
+                    PWM_HeadDegreeTarget = PWM_HeadDegreeToSend.value + FRAME_DegreeY;
+                    if (PWM_HeadDegreeTarget < PWM_HeadMinDegree)
+                        PWM_HeadDegreeTarget = PWM_HeadMinDegree;
+                    if (PWM_HeadDegreeTarget > PWM_HeadMaxDegree)
+                        PWM_HeadDegreeTarget = PWM_HeadMaxDegree;
+                }
             }
 
-            PWM_BaseDegreeToSend.value += (PWM_UpdateStepPercentage / 100) * (PWM_BaseDegreeTarget - PWM_BaseDegreeToSend.value);
-            PWM_HeadDegreeToSend.value += (PWM_UpdateStepPercentage / 100) * (PWM_HeadDegreeTarget - PWM_HeadDegreeToSend.value);
+            float PWM_BaseStep = PWM_BaseDegreeTarget - PWM_BaseDegreeToSend.value;                 // Vector distance to target
+            float PWM_HeadStep = PWM_HeadDegreeTarget - PWM_HeadDegreeToSend.value;                 // Vector distance to target
 
-            if (errQUEUE_FULL == xQueueSend(PWM_QueueHandle, &PWM_BaseDegreeToSend, PWM_SendTimeout))
-                reportError(CV_Core_xQueueSend_To_motorTask);
-            if (errQUEUE_FULL == xQueueSend(PWM_QueueHandle, &PWM_HeadDegreeToSend, PWM_SendTimeout))
-                reportError(CV_Core_xQueueSend_To_motorTask);
+            float PWM_BaseOffset = ((PWM_BaseStep > 0) ? (PWM_BaseStep) : (-PWM_BaseStep));         // Absolute distance to target
+            float PWM_HeadOffset = ((PWM_HeadStep > 0) ? (PWM_HeadStep) : (-PWM_HeadStep));         // Absolute distance to target
 
+            if (PWM_BaseOffset > CAM_DegreeBeforeStopFollowing) {
+                PWM_BaseDegreeToSend.value += (PWM_UpdateStepPercentage / 100) * (PWM_BaseStep);
+                if (errQUEUE_FULL == xQueueSend(PWM_QueueHandle, &PWM_BaseDegreeToSend, PWM_SendTimeout))
+                    reportError(CV_Core_xQueueSend_To_motorTask);
+            }
+            if (PWM_HeadOffset > CAM_DegreeBeforeStopFollowing) {
+                PWM_HeadDegreeToSend.value += (PWM_UpdateStepPercentage / 100) * (PWM_HeadStep);
+                if (errQUEUE_FULL == xQueueSend(PWM_QueueHandle, &PWM_HeadDegreeToSend, PWM_SendTimeout))
+                    reportError(CV_Core_xQueueSend_To_motorTask);
+            }
             vTaskDelay((1 / PWM_UpdateFrequencyInHz) * 1000 * portTICK_PERIOD_MS);
             return true;
         }

@@ -54,13 +54,13 @@ class CV_Core : public scheduler_task
         float PWM_UpdateStepPercentage;         ///< Percentage of degrees to add per Update [Value is between 0 and 100]
 
         float PWM_BaseDegreeTarget;             ///< Target PWM_t->value to Update PWM_BaseDegreeToSend to (Base Servo)
-        float PWM_BaseMinDegree;                ///< Max degree of Base Servo
-        float PWM_BaseMaxDegree;                ///< Max degree of Base Servo
+        float PWM_BaseDegreeLeftLimit;          ///< Max leftward degree of Base Servo
+        float PWM_BaseDegreeRightLimit;         ///< Max rightward degree of Base Servo
         PWM_t PWM_BaseDegreeToSend;             ///< PWM_t to xQueueSend to Pin 2.0 per Update (Base Servo)
 
         float PWM_HeadDegreeTarget;             ///< Target PWM_t->value to Update PWM_HeadDegreeToSend to (Head Servo)
-        float PWM_HeadMinDegree;                ///< Max degree of Head Servo
-        float PWM_HeadMaxDegree;                ///< Max degree of Head Servo
+        float PWM_HeadDegreeUpperLimit;         ///< Max upward degree of Head Servo
+        float PWM_HeadDegreeLowerLimit;         ///< Max downward degree of Head Servo
         PWM_t PWM_HeadDegreeToSend;             ///< PWM_t to xQueueSend to Pin 2.1 per Update (Head Servo)
 
         float CAM_ViewAngleHorizontal;          ///< Horizontal view angle of the camera
@@ -81,13 +81,13 @@ class CV_Core : public scheduler_task
             PWM_UpdateStepPercentage(5),                            ///< 30% of degrees added per Update
 
             PWM_BaseDegreeTarget(0),                                ///< Target PWM_t->value to Update PWM_BaseDegreeToSend to (Base Servo)
-            PWM_BaseMinDegree(-90),                                 ///< Max degree of Base Servo
-            PWM_BaseMaxDegree(90),                                  ///< Max degree of Base Servo
+            PWM_BaseDegreeLeftLimit(90),                            ///< Max leftward degree of Base Servo
+            PWM_BaseDegreeRightLimit(90),                           ///< Max rightward degree of Base Servo
             PWM_BaseDegreeToSend{p2_0, pwmDegree, 0},               ///< Pin 2.0 (Base Servo), Value type is in degrees, Initial value
 
             PWM_HeadDegreeTarget(0),                                ///< Target PWM_t->value to Update PWM_HeadDegreeToSend to (Head Servo)
-            PWM_HeadMinDegree(-90),                                 ///< Max degree of Head Servo
-            PWM_HeadMaxDegree(0),                                   ///< Max degree of Head Servo
+            PWM_HeadDegreeUpperLimit(0),                            ///< Max upward degree of Head Servo
+            PWM_HeadDegreeLowerLimit(90),                           ///< Max downward degree of Head Servo
             PWM_HeadDegreeToSend{p2_1, pwmDegree, 0},               ///< Pin 2.1 (Head Servo), Value type is in degrees, Initial value
 
             CAM_ViewAngleHorizontal(48),                            ///< 48 degrees
@@ -124,17 +124,17 @@ class CV_Core : public scheduler_task
 
                 if (FRAME_OffsetX > CAM_DegreeBeforeStartFollowing) {
                     PWM_BaseDegreeTarget = PWM_BaseDegreeToSend.value - FRAME_DegreeX;              // Inverted Rotation Logic
-                    if (PWM_BaseDegreeTarget < PWM_BaseMinDegree)
-                        PWM_BaseDegreeTarget = PWM_BaseMinDegree;
-                    if (PWM_BaseDegreeTarget > PWM_BaseMaxDegree)
-                        PWM_BaseDegreeTarget = PWM_BaseMaxDegree;
+                    if (PWM_BaseDegreeTarget < (-PWM_BaseDegreeRightLimit)) // Servo right is negative
+                        PWM_BaseDegreeTarget = (-PWM_BaseDegreeRightLimit); // Servo right is negative
+                    if (PWM_BaseDegreeTarget > (+PWM_BaseDegreeLeftLimit )) // Servo left is positive
+                        PWM_BaseDegreeTarget = (+PWM_BaseDegreeLeftLimit ); // Servo left is positive
                 }
                 if (FRAME_OffsetY > CAM_DegreeBeforeStartFollowing) {
                     PWM_HeadDegreeTarget = PWM_HeadDegreeToSend.value - FRAME_DegreeY;              // Inverted Rotation Logic
-                    if (PWM_HeadDegreeTarget < PWM_HeadMinDegree)
-                        PWM_HeadDegreeTarget = PWM_HeadMinDegree;
-                    if (PWM_HeadDegreeTarget > PWM_HeadMaxDegree)
-                        PWM_HeadDegreeTarget = PWM_HeadMaxDegree;
+                    if (PWM_HeadDegreeTarget < (-PWM_HeadDegreeUpperLimit)) // Servo up is negative
+                        PWM_HeadDegreeTarget = (-PWM_HeadDegreeUpperLimit); // Servo up is negative
+                    if (PWM_HeadDegreeTarget > (+PWM_HeadDegreeLowerLimit)) // Servo down is positive
+                        PWM_HeadDegreeTarget = (+PWM_HeadDegreeLowerLimit); // Servo down is positive
                 }
             }
 

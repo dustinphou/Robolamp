@@ -171,10 +171,8 @@ class LEDTask : public scheduler_task
 
         float LED_UpdateFrequencyInHz;      ///< Frequency at which to Update PWM_LEDPercentage in Hertz
         float LED_UpdateStepInPercentage;   ///< Percentage of light to add per Update [Value is between 0 and 100]
-        float LED_MinOutputPercentage;      ///< Minimum Brightness of LED [Value is between 0 and 100]
-        float LED_MaxOutputPercentage;      ///< Maximum Brightness of LED [Value is between 0 and 100]
-        float LED_BrightnessWhenDark;
-        float LED_BrightnessWhenAmbient;
+        float LED_BrightnessWhenDark;   ///< Maximum Brightness of LED [Value is between 0 and 100]
+        float LED_BrightnessWhenAmbient;    ///< Minimum Brightness of LED [Value is between 0 and 100]
         float ENV_DarkPercentage;       ///< Minimum Brightness of Environment [Value is between 0 and 100]
         float ENV_AmbientPercentage;       ///< Maximum Brightness of Environment [Value is between 0 and 100]
 
@@ -184,12 +182,10 @@ class LEDTask : public scheduler_task
             PWM_SendTimeout(0 * portTICK_PERIOD_MS),                ///< 0ms
 
             PWM_LEDPercentage{p2_5, pwmPercent, 10},                ///< Pin 2.5 (Super LED), Value type is in percentages, Initial value
-            LED_UpdateFrequencyInHz(60),    ///< Update Frequency = 10 Hz
-            LED_UpdateStepInPercentage(1), ///< Update Step = 10 %
-            LED_MinOutputPercentage(00),    ///< Minimum LED Brightness
-            LED_MaxOutputPercentage(100),   ///< Maximum LED Brightness
-            LED_BrightnessWhenDark(100),
-            LED_BrightnessWhenAmbient(0),
+            LED_UpdateFrequencyInHz(2),     ///< Update Frequency = 10 Hz
+            LED_UpdateStepInPercentage(10), ///< Update Step = 10 %
+            LED_BrightnessWhenDark(100),    ///< Minimum LED Brightness
+            LED_BrightnessWhenAmbient(0),   ///< Maximum LED Brightness
             ENV_DarkPercentage(0),      ///< Minimum Environment Brightness
             ENV_AmbientPercentage(25)      ///< Maximum Environment Brightness
 
@@ -199,13 +195,13 @@ class LEDTask : public scheduler_task
 
         bool run(void *p)
         {
-            float conversionRatio = ((LED_MaxOutputPercentage-LED_MinOutputPercentage)/(ENV_AmbientPercentage-ENV_DarkPercentage));
+            float conversionRatio = ((LED_BrightnessWhenDark-LED_BrightnessWhenAmbient)/(ENV_AmbientPercentage-ENV_DarkPercentage));
             float nextBrightness = (LED_BrightnessWhenDark) - ((conversionRatio)*(LS.getPercentValue()));
-                PWM_LEDPercentage.value += ((LED_UpdateStepInPercentage / 100) * (nextBrightness - PWM_LEDPercentage.value));
-            if (PWM_LEDPercentage.value < LED_MinOutputPercentage)
-                PWM_LEDPercentage.value = LED_MinOutputPercentage;
-            if (PWM_LEDPercentage.value > LED_MaxOutputPercentage)
-                PWM_LEDPercentage.value = LED_MaxOutputPercentage;
+            PWM_LEDPercentage.value += ((LED_UpdateStepInPercentage / 100) * (nextBrightness - PWM_LEDPercentage.value));
+            if (PWM_LEDPercentage.value < LED_BrightnessWhenAmbient)
+                PWM_LEDPercentage.value = LED_BrightnessWhenAmbient;
+            if (PWM_LEDPercentage.value > LED_BrightnessWhenDark)
+                PWM_LEDPercentage.value = LED_BrightnessWhenDark;
             if (errQUEUE_FULL == xQueueSend(PWM_QueueHandle, &PWM_LEDPercentage, PWM_SendTimeout))
                 reportError(LEDTask_xQueueSend_To_motorTask);
             vTaskDelay((1 / LED_UpdateFrequencyInHz) * 1000 * portTICK_PERIOD_MS);

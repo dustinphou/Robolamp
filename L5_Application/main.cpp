@@ -99,14 +99,6 @@ class CV_Core : public scheduler_task
             CAM_DegreeBeforeStartFollowing(5),                      ///< 5 degrees
             CAM_DegreeBeforeStopFollowing(5)                        ///< 5 degrees
         {
-            float initpos_Data[2];                                  ///< Reads last targeted position from file
-            if (FR_OK == Storage::read(initpos_Filename, initpos_Data, sizeof(initpos_Data))) {
-                PWM_BaseDegreeToSend.value = initpos_Data[0];
-                PWM_HeadDegreeToSend.value = initpos_Data[1];
-            }
-            else {
-                reportError(CV_Core_Storage_read_not_OK);
-            }
             addSharedObject(CV_QueueHandle_id, CV_QueueHandle);         ///< Shares CV_QueueHandle
             addSharedObject(FRAME_QueueHandle_id, FRAME_QueueHandle);   ///< Shares FRAME_QueueHandle
             addSharedObject(PWM_QueueHandle_id, PWM_QueueHandle);       ///< Shares PWM_QueueHandle
@@ -115,8 +107,16 @@ class CV_Core : public scheduler_task
 
         bool taskEntry(void)
         {
-            xQueueSend(PWM_QueueHandle, &PWM_BaseDegreeToSend, PWM_SendTimeout);  ///< Send initial PWM_t
-            xQueueSend(PWM_QueueHandle, &PWM_HeadDegreeToSend, PWM_SendTimeout);  ///< Send initial PWM_t
+            float initpos_Data[2];                                                  ///< Reads last targeted position from file
+            if (FR_OK == Storage::read(initpos_Filename, initpos_Data, sizeof(initpos_Data))) {
+                PWM_BaseDegreeToSend.value = initpos_Data[0];
+                PWM_HeadDegreeToSend.value = initpos_Data[1];
+            }
+            else {
+                reportError(CV_Core_Storage_read_not_OK);
+            }
+            xQueueSend(PWM_QueueHandle, &PWM_BaseDegreeToSend, PWM_SendTimeout);    ///< Send initial PWM_t
+            xQueueSend(PWM_QueueHandle, &PWM_HeadDegreeToSend, PWM_SendTimeout);    ///< Send initial PWM_t
 
             return true;
         }

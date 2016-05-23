@@ -173,8 +173,10 @@ class LEDTask : public scheduler_task
         float LED_UpdateStepInPercentage;   ///< Percentage of light to add per Update [Value is between 0 and 100]
         float LED_MinOutputPercentage;      ///< Minimum Brightness of LED [Value is between 0 and 100]
         float LED_MaxOutputPercentage;      ///< Maximum Brightness of LED [Value is between 0 and 100]
-        float ENV_MinInputPercentage;       ///< Minimum Brightness of Environment [Value is between 0 and 100]
-        float ENV_MaxInputPercentage;       ///< Maximum Brightness of Environment [Value is between 0 and 100]
+        float LED_BrightnessWhenDark;
+        float LED_BrightnessWhenAmbient;
+        float ENV_DarkPercentage;       ///< Minimum Brightness of Environment [Value is between 0 and 100]
+        float ENV_AmbientPercentage;       ///< Maximum Brightness of Environment [Value is between 0 and 100]
 
     public:
         LEDTask(uint8_t priority) : scheduler_task("LED", 2048, priority),
@@ -182,22 +184,24 @@ class LEDTask : public scheduler_task
             PWM_SendTimeout(0 * portTICK_PERIOD_MS),                ///< 0ms
 
             PWM_LEDPercentage{p2_5, pwmPercent, 10},                ///< Pin 2.5 (Super LED), Value type is in percentages, Initial value
-
-            LED_UpdateFrequencyInHz(10),    ///< Update Frequency = 10 Hz
-            LED_UpdateStepInPercentage(10), ///< Update Step = 10 %
-            LED_MinOutputPercentage(50),    ///< Minimum LED Brightness
+            LED_UpdateFrequencyInHz(60),    ///< Update Frequency = 10 Hz
+            LED_UpdateStepInPercentage(1), ///< Update Step = 10 %
+            LED_MinOutputPercentage(00),    ///< Minimum LED Brightness
             LED_MaxOutputPercentage(100),   ///< Maximum LED Brightness
-            ENV_MinInputPercentage(0),      ///< Minimum Environment Brightness
-            ENV_MaxInputPercentage(25)      ///< Maximum Environment Brightness
+            LED_BrightnessWhenDark(100),
+            LED_BrightnessWhenAmbient(0),
+            ENV_DarkPercentage(0),      ///< Minimum Environment Brightness
+            ENV_AmbientPercentage(25)      ///< Maximum Environment Brightness
+
         {
             /* Nothing to init */
         }
 
         bool run(void *p)
         {
-            float conversionRatio = ((LED_MaxOutputPercentage-LED_MinOutputPercentage)/(ENV_MaxInputPercentage-ENV_MinInputPercentage));
-            float nextBrightness = ((conversionRatio)*(LS.getPercentValue())) + (LED_MinOutputPercentage);
-            PWM_LEDPercentage.value += ((LED_UpdateStepInPercentage / 100) * (nextBrightness - PWM_LEDPercentage.value));
+            float conversionRatio = ((LED_MaxOutputPercentage-LED_MinOutputPercentage)/(ENV_AmbientPercentage-ENV_DarkPercentage));
+            float nextBrightness = (LED_BrightnessWhenDark) - ((conversionRatio)*(LS.getPercentValue()));
+                PWM_LEDPercentage.value += ((LED_UpdateStepInPercentage / 100) * (nextBrightness - PWM_LEDPercentage.value));
             if (PWM_LEDPercentage.value < LED_MinOutputPercentage)
                 PWM_LEDPercentage.value = LED_MinOutputPercentage;
             if (PWM_LEDPercentage.value > LED_MaxOutputPercentage)

@@ -176,6 +176,8 @@ class LEDTask : public scheduler_task
         float LED_UpdateFrequencyInHz;      ///< Frequency at which to Update PWM_LEDPercentage in Hertz
         float LED_UpdateStepInPercentage;   ///< Percentage of light to add per Update [Value is between 0 and 100]
 
+        TStat CV_Core_Status;               ///< Status of CV_Core [running = true, suspended = false]
+
     public:
         LEDTask(uint8_t priority) : scheduler_task("LED", 2048, priority),
             PWM_QueueHandle(getSharedObject(PWM_QueueHandle_id)),   ///< PWM_QueueHandle
@@ -183,12 +185,14 @@ class LEDTask : public scheduler_task
 
             PWM_LEDPercentage{p2_5, pwmPercent, 0},                 ///< Pin 2.5 (Super LED), Value type is in percentages, Initial value
 
-            ENV_DarkPercentage(10),          ///< Minimum Environment Brightness
-            ENV_AmbientPercentage(11),      ///< Maximum Environment Brightness
-            LED_BrightnessWhenDark(100),    ///< Minimum LED Brightness
-            LED_BrightnessWhenAmbient(0),   ///< Maximum LED Brightness
-            LED_UpdateFrequencyInHz(10),    ///< Update Frequency = 2 Hz
-            LED_UpdateStepInPercentage(100) ///< Update Step = 10 %
+            ENV_DarkPercentage(10),             ///< Minimum Environment Brightness
+            ENV_AmbientPercentage(11),          ///< Maximum Environment Brightness
+            LED_BrightnessWhenDark(100),        ///< Minimum LED Brightness
+            LED_BrightnessWhenAmbient(0),       ///< Maximum LED Brightness
+            LED_UpdateFrequencyInHz(10),        ///< Update Frequency = 2 Hz
+            LED_UpdateStepInPercentage(100),    ///< Update Step = 10 %
+
+            CV_Core_Status(Running)             ///< CV_Core is running on startup
 
         {
             /* Nothing to init */
@@ -208,8 +212,18 @@ class LEDTask : public scheduler_task
             if (PWM_LEDPercentage.value > (0.90 * (maxBrightness - minBrightness)))
                 PWM_LEDPercentage.value = maxBrightness;
 
+            if (PWM_LEDPercentage.value <= minBrightness && CV_Core_Status == Running) {
+                getTaskPtrByName("core")->suspend();
+                CV_Core_Status = Suspended;
+            }
+            if (PWM_LEDPercentage.value > minBrightness && CV_Core_Status == Suspended) {
+                getTaskPtrByName("core")->resume();
+                CV_Core_Status = Running;
+            }
+
             if (errQUEUE_FULL == xQueueSend(PWM_QueueHandle, &PWM_LEDPercentage, PWM_SendTimeout))
                 reportError(LEDTask_xQueueSend_To_motorTask);
+
             vTaskDelay((1 / LED_UpdateFrequencyInHz) * 1000 * portTICK_PERIOD_MS);
             return true;
         }

@@ -52,6 +52,12 @@ enum ERR_id
  */
 void reportError(ERR_id error);
 
+enum TStat
+{
+    Running,    // Task is running
+    Suspended,  // Task is suspended
+};
+
 struct CV_t
 {
         uint16_t coordx;    // The horizontal coordinates of the point. Ex: 123

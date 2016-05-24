@@ -183,12 +183,12 @@ class LEDTask : public scheduler_task
 
             PWM_LEDPercentage{p2_5, pwmPercent, 0},                 ///< Pin 2.5 (Super LED), Value type is in percentages, Initial value
 
-            ENV_DarkPercentage(0),          ///< Minimum Environment Brightness
-            ENV_AmbientPercentage(25),      ///< Maximum Environment Brightness
+            ENV_DarkPercentage(10),          ///< Minimum Environment Brightness
+            ENV_AmbientPercentage(11),      ///< Maximum Environment Brightness
             LED_BrightnessWhenDark(100),    ///< Minimum LED Brightness
             LED_BrightnessWhenAmbient(0),   ///< Maximum LED Brightness
-            LED_UpdateFrequencyInHz(2),     ///< Update Frequency = 2 Hz
-            LED_UpdateStepInPercentage(10)  ///< Update Step = 10 %
+            LED_UpdateFrequencyInHz(10),    ///< Update Frequency = 2 Hz
+            LED_UpdateStepInPercentage(100) ///< Update Step = 10 %
 
         {
             /* Nothing to init */
@@ -197,16 +197,17 @@ class LEDTask : public scheduler_task
         bool run(void *p)
         {
             float conversionRatio = ((LED_BrightnessWhenAmbient-LED_BrightnessWhenDark)/(ENV_AmbientPercentage-ENV_DarkPercentage));
-            float nextBrightness = (((conversionRatio)*(LS.getPercentValue()) + LED_BrightnessWhenDark));
+            float conversionOffset = ((LED_BrightnessWhenDark)-(conversionRatio*ENV_DarkPercentage));
+            float nextBrightness = (((conversionRatio)*(LS.getPercentValue()) + conversionOffset));
             PWM_LEDPercentage.value += ((LED_UpdateStepInPercentage / 100) * (nextBrightness - PWM_LEDPercentage.value));
 
             float minBrightness = LED_BrightnessWhenAmbient < LED_BrightnessWhenDark ? LED_BrightnessWhenAmbient : LED_BrightnessWhenDark;
             float maxBrightness = LED_BrightnessWhenAmbient > LED_BrightnessWhenDark ? LED_BrightnessWhenAmbient : LED_BrightnessWhenDark;
-            if (PWM_LEDPercentage.value < minBrightness)
+            if (PWM_LEDPercentage.value < (0.10 * (maxBrightness - minBrightness)))
                 PWM_LEDPercentage.value = minBrightness;
-            if (PWM_LEDPercentage.value > maxBrightness)
+            if (PWM_LEDPercentage.value > (0.90 * (maxBrightness - minBrightness)))
                 PWM_LEDPercentage.value = maxBrightness;
-
+            printf("Light: %d\n Percent: %f\n", LS.getPercentValue(), PWM_LEDPercentage.value);
             if (errQUEUE_FULL == xQueueSend(PWM_QueueHandle, &PWM_LEDPercentage, PWM_SendTimeout))
                 reportError(LEDTask_xQueueSend_To_motorTask);
             vTaskDelay((1 / LED_UpdateFrequencyInHz) * 1000 * portTICK_PERIOD_MS);

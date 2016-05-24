@@ -207,7 +207,7 @@ class LEDTask : public scheduler_task
                 PWM_LEDPercentage.value = minBrightness;
             if (PWM_LEDPercentage.value > (0.90 * (maxBrightness - minBrightness)))
                 PWM_LEDPercentage.value = maxBrightness;
-            printf("Light: %d\n Percent: %f\n", LS.getPercentValue(), PWM_LEDPercentage.value);
+
             if (errQUEUE_FULL == xQueueSend(PWM_QueueHandle, &PWM_LEDPercentage, PWM_SendTimeout))
                 reportError(LEDTask_xQueueSend_To_motorTask);
             vTaskDelay((1 / LED_UpdateFrequencyInHz) * 1000 * portTICK_PERIOD_MS);
